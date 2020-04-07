@@ -4,8 +4,9 @@ Author: Francis Chan
 Utility functions for model building
 
 """
-import os, random, getpass, pyodbc
+import os, random
 import bisect
+from zlib import crc32
 import numpy as np
 import pandas as pd
 import explore as ex
@@ -48,84 +49,6 @@ def widedf_to_talldf(df, id_vars=['Segment']):
     df = pd.melt(df, id_vars=id_vars)
     
     return df
-
-#-------------------------------------------------------------------------
-# variable profiling
-#-------------------------------------------------------------------------
-# def profile_variables(df, colname, target_col = 'Segment', num_bins=10, 
-#                       var_name='GRP', raw_count=False, categorical=False):
-#     '''
-#         profile one single variable
-#         Calculates the cross table or KL divergence 
-#         :param: df        : data frame
-#         :param: colname   : name of column for profiling
-#         :param: target_col: name of the target
-#         :param: num_bins  : number of bins for continuous variable
-#         :param: var_name  : column name prefix in resultant data frame
-#         :param: raw_count : cross table (if True), KL diverence otherwise
-#         :param: categorical: True if colname is a categorical variable 
-        
-#     '''
-    
-#     num_unique = ex.count_unique_values(df, subset=target_col)
-#     num_segments = num_unique[target_col]
-    
-#     if not categorical:
-#         tmp = pd.qcut(df[colname], num_bins, retbins=True, duplicates='drop')
-#         profile = pd.crosstab(df[target_col], tmp[0])
-#         # rename binned columns
-#         newcolname = [var_name + '_' + str(v) for v in range(profile.shape[1])]
-#         profile.columns = newcolname        
-#     else:
-#         num_unique = ex.count_unique_values(df, subset=colname)
-#         num_bins = num_unique[colname]
-#         profile = pd.crosstab(df[target_col], df[colname])
-
-#     if not raw_count:
-#         # likelihood for each bin
-#         bin_distribution = profile.sum() / sum(profile.sum())
-#         # check num bins again
-#         num_bins = profile.shape[1]
-
-#         # calculate likelihood
-#         for k in range(num_segments):
-#             # row selection
-#             profile.iloc[k] = profile.iloc[k] / sum(profile.iloc[k])
-            
-#         # calculate KL divergence 
-#         for k in range(num_bins):
-#             # column selection
-#             if bin_distribution[k] == 0:
-#                 profile.iloc[:,k] = np.NaN
-#             else:
-#                 profile.iloc[:,k] = np.log(profile.iloc[:,k] / bin_distribution[k])       
-        
-#     return profile
-
-# def profile_varList(df, varList, var_name='GRP', target_col = 'Segment', 
-#                     num_bins=10, raw_count=False, long_table=False):
-#     "profile list of variables"
-    
-#     categorical_cols = ex.get_categorical_column(df[varList])
-    
-#     result = []
-#     for var in varList:
-#         is_categorical = var in categorical_cols
-#         new_profile = profile_variables(df, var, target_col, num_bins, 
-#                                         var_name, raw_count, is_categorical)
-#         if long_table:
-#             new_profile = widedf_to_talldf(new_profile, [target_col])
-#             new_profile.columns = [target_col, 'variable', 'value']
-        
-#         result.append(new_profile)
-
-#     if long_table:
-#         result = pd.concat(result)
-#     else:
-#         result = pd.concat(result, axis=1)
-        
-#     return result
-
 
 
 def discretize_column(df, colname, append_column=True, num_bins=3, suffix ='GRP', group_labels=['Low', 'Mid', 'High']):
@@ -342,10 +265,10 @@ def extract_feature_target(df, target, todf=True, exclusions=None):
 
     return (X, y, features)
 
-def get_unique_values(df, col):
-    "get unique values of the given col"
+# def get_unique_values(df, col):
+#     "get unique values of the given col"
 
-    return list(df[col].unique())
+#     return list(df[col].unique())
 
 #----------------------------------------------------------------------
 # split training / testing data for data frame
@@ -412,101 +335,121 @@ def get_LabelBinarizer_index(lb, target):
 
     return (idx)
 
-def train_test_split_with_target(*args, **kwargs):
-    """"split data frame into train/test"""
-    split_target = False
-    if "target" in kwargs.keys():
-        target_col = kwargs["target"]
-        split_target = True
-        # remove target before passing it to the original one
-        del kwargs["target"]
+
+def split_train_test_by_id(data, test_ratio, id_column):
+
+    def test_set_check(identifier, test_ratio):
+        return crc32(np.int64(identifier)) & 0xffffffff < test_ratio * 2**32
+
+    ids = data[id_column]
+    in_test_set = ids.apply(lambda id_: test_set_check(id_, test_ratio))
+    return data.loc[~in_test_set], data.loc[in_test_set]
+
+
+def npslice(arr, begin, size):
+    "works as tf.slice"
+    ending = [sum(x) for x in zip(begin, size)]
+    rng = list(zip(begin, ending))
+    idx = [slice(*list(tup)) for tup in rng]   
+    return arr[tuple(idx)
+
+
+
+# def train_test_split_with_target(*args, **kwargs):
+#     """"split data frame into train/test"""
+#     split_target = False
+#     if "target" in kwargs.keys():
+#         target_col = kwargs["target"]
+#         split_target = True
+#         # remove target before passing it to the original one
+#         del kwargs["target"]
         
-    train_set, test_set = train_test_split(*args, **kwargs) 
+#     train_set, test_set = train_test_split(*args, **kwargs) 
 
-    if split_target:
-        train_set_target = train_set[target_col]
-        test_set_target = test_set[target_col]
-        train_set = train_set.drop([target_col], axis=1)
-        test_set = test_set.drop([target_col], axis=1)
-        return (train_set, test_set, train_set_target, test_set_target)
-    else:
-        return (train_set, test_set)
-
-# deprecated
-def df_train_test_split(df, target, binarizer=None, exclusions=None, **kwargs):
-    '''
-        split pd data frame to train and test data
-        INPUTS:
-            df        : explanatory and target data frame
-            target    : name of target column
-            args      : list of dictionary (non key-worded)
-            kwargs    : dictionary (key-worded)
-        OUTPUTS:
-            X_train    : training data (ndarray)
-            X_test     : testing data (ndarray)
-            y_train    : training target (ndarray)
-            y_test     : testing target (ndarray)
-    '''
-
-    # check if it is a data frame
-    if not isinstance(df, pd.DataFrame):
-        raise ValueError("Data Frame required")
-
-    # stratify target by default
-    kwargs.pop('stratify', target)
-
-    X, y, features = extract_feature_target(df, target, exclusions)
-
-    if binarizer is not None:
-        y = binarizer.fit_transform(y)
-
-    # sklearn train test split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, **kwargs)
-
-    return (X_train, X_test, y_train, y_test, features)
+#     if split_target:
+#         train_set_target = train_set[target_col]
+#         test_set_target = test_set[target_col]
+#         train_set = train_set.drop([target_col], axis=1)
+#         test_set = test_set.drop([target_col], axis=1)
+#         return (train_set, test_set, train_set_target, test_set_target)
+#     else:
+#         return (train_set, test_set)
 
 # deprecated
-def df_train_test_split_bycol(df, target, col,
-                                train_list, test_list,
-                                id = "id", exclusions=None):
-    '''
-        split pd data frame to train and test data
-        INPUTS:
-            df        : explanatory and target data frame
-            target    : name of target column
-            by        : split data frame using values in this column
-            train_list: assign to training set for these values
-            test_list : assign to testing set for these values
-            args      : list of dictionary (non key-worded)
-            kwargs    : dictionary (key-worded)
-        OUTPUTS:
-            X_train    : training data (ndarray)
-            X_test     : testing data (ndarray)
-            y_train    : training target (ndarray)
-            y_test     : testing target (ndarray)
-            train_id   : id array for trianing data
-            test_id    : id array for testing data
-    '''
+# def df_train_test_split(df, target, binarizer=None, exclusions=None, **kwargs):
+#     '''
+#         split pd data frame to train and test data
+#         INPUTS:
+#             df        : explanatory and target data frame
+#             target    : name of target column
+#             args      : list of dictionary (non key-worded)
+#             kwargs    : dictionary (key-worded)
+#         OUTPUTS:
+#             X_train    : training data (ndarray)
+#             X_test     : testing data (ndarray)
+#             y_train    : training target (ndarray)
+#             y_test     : testing target (ndarray)
+#     '''
 
-    # check if it is a data frame
-    if not isinstance(df, pd.DataFrame):
-        raise ValueError("Data Frame required")
+#     # check if it is a data frame
+#     if not isinstance(df, pd.DataFrame):
+#         raise ValueError("Data Frame required")
 
-    tvd = df[df[col].isin(train_list)]
-    osd = df[df[col].isin(test_list)]
+#     # stratify target by default
+#     kwargs.pop('stratify', target)
 
-    y_train = tvd[target].values
-    y_test = osd[target].values
+#     X, y, features = extract_feature_target(df, target, exclusions)
 
-    feature_list = list(set(df.columns) - set([target]))
+#     if binarizer is not None:
+#         y = binarizer.fit_transform(y)
 
-    if exclusions is not None:
-        feature_list = list(set(feature_list) - set(exclusions))
+#     # sklearn train test split
+#     X_train, X_test, y_train, y_test = train_test_split(X, y, **kwargs)
 
-    X_train = tvd[feature_list].values
-    X_test = osd[feature_list].values
+#     return (X_train, X_test, y_train, y_test, features)
 
-    train_id = tvd[id].values
-    test_id = osd[id].values
+# deprecated
+# def df_train_test_split_bycol(df, target, col,
+#                                 train_list, test_list,
+#                                 id = "id", exclusions=None):
+#     '''
+#         split pd data frame to train and test data
+#         INPUTS:
+#             df        : explanatory and target data frame
+#             target    : name of target column
+#             by        : split data frame using values in this column
+#             train_list: assign to training set for these values
+#             test_list : assign to testing set for these values
+#             args      : list of dictionary (non key-worded)
+#             kwargs    : dictionary (key-worded)
+#         OUTPUTS:
+#             X_train    : training data (ndarray)
+#             X_test     : testing data (ndarray)
+#             y_train    : training target (ndarray)
+#             y_test     : testing target (ndarray)
+#             train_id   : id array for trianing data
+#             test_id    : id array for testing data
+#     '''
 
-    return (X_train, X_test, y_train, y_test, train_id, test_id)
+#     # check if it is a data frame
+#     if not isinstance(df, pd.DataFrame):
+#         raise ValueError("Data Frame required")
+
+#     tvd = df[df[col].isin(train_list)]
+#     osd = df[df[col].isin(test_list)]
+
+#     y_train = tvd[target].values
+#     y_test = osd[target].values
+
+#     feature_list = list(set(df.columns) - set([target]))
+
+#     if exclusions is not None:
+#         feature_list = list(set(feature_list) - set(exclusions))
+
+#     X_train = tvd[feature_list].values
+#     X_test = osd[feature_list].values
+
+#     train_id = tvd[id].values
+#     test_id = osd[id].values
+
+#     return (X_train, X_test, y_train, y_test, train_id, test_id)
