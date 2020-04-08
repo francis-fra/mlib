@@ -4,18 +4,18 @@ Author: Francis Chan
 Utility functions for model building
 
 """
-import os, random
+import os, sys, random
 import bisect
 from zlib import crc32
 import numpy as np
 import pandas as pd
-import explore as ex
 from sklearn.model_selection import train_test_split
 import functools
 from datetime import datetime
 import dateutil.relativedelta
 
 from sklearn.preprocessing import label_binarize, LabelBinarizer
+import explore as ex
 
 #-------------------------------------------------------------------------
 # Loading Data
@@ -347,109 +347,9 @@ def split_train_test_by_id(data, test_ratio, id_column):
 
 
 def npslice(arr, begin, size):
-    "works as tf.slice"
+    "tf.slice for numpy"
     ending = [sum(x) for x in zip(begin, size)]
     rng = list(zip(begin, ending))
     idx = [slice(*list(tup)) for tup in rng]   
-    return arr[tuple(idx)
+    return arr[tuple(idx)]
 
-
-
-# def train_test_split_with_target(*args, **kwargs):
-#     """"split data frame into train/test"""
-#     split_target = False
-#     if "target" in kwargs.keys():
-#         target_col = kwargs["target"]
-#         split_target = True
-#         # remove target before passing it to the original one
-#         del kwargs["target"]
-        
-#     train_set, test_set = train_test_split(*args, **kwargs) 
-
-#     if split_target:
-#         train_set_target = train_set[target_col]
-#         test_set_target = test_set[target_col]
-#         train_set = train_set.drop([target_col], axis=1)
-#         test_set = test_set.drop([target_col], axis=1)
-#         return (train_set, test_set, train_set_target, test_set_target)
-#     else:
-#         return (train_set, test_set)
-
-# deprecated
-# def df_train_test_split(df, target, binarizer=None, exclusions=None, **kwargs):
-#     '''
-#         split pd data frame to train and test data
-#         INPUTS:
-#             df        : explanatory and target data frame
-#             target    : name of target column
-#             args      : list of dictionary (non key-worded)
-#             kwargs    : dictionary (key-worded)
-#         OUTPUTS:
-#             X_train    : training data (ndarray)
-#             X_test     : testing data (ndarray)
-#             y_train    : training target (ndarray)
-#             y_test     : testing target (ndarray)
-#     '''
-
-#     # check if it is a data frame
-#     if not isinstance(df, pd.DataFrame):
-#         raise ValueError("Data Frame required")
-
-#     # stratify target by default
-#     kwargs.pop('stratify', target)
-
-#     X, y, features = extract_feature_target(df, target, exclusions)
-
-#     if binarizer is not None:
-#         y = binarizer.fit_transform(y)
-
-#     # sklearn train test split
-#     X_train, X_test, y_train, y_test = train_test_split(X, y, **kwargs)
-
-#     return (X_train, X_test, y_train, y_test, features)
-
-# deprecated
-# def df_train_test_split_bycol(df, target, col,
-#                                 train_list, test_list,
-#                                 id = "id", exclusions=None):
-#     '''
-#         split pd data frame to train and test data
-#         INPUTS:
-#             df        : explanatory and target data frame
-#             target    : name of target column
-#             by        : split data frame using values in this column
-#             train_list: assign to training set for these values
-#             test_list : assign to testing set for these values
-#             args      : list of dictionary (non key-worded)
-#             kwargs    : dictionary (key-worded)
-#         OUTPUTS:
-#             X_train    : training data (ndarray)
-#             X_test     : testing data (ndarray)
-#             y_train    : training target (ndarray)
-#             y_test     : testing target (ndarray)
-#             train_id   : id array for trianing data
-#             test_id    : id array for testing data
-#     '''
-
-#     # check if it is a data frame
-#     if not isinstance(df, pd.DataFrame):
-#         raise ValueError("Data Frame required")
-
-#     tvd = df[df[col].isin(train_list)]
-#     osd = df[df[col].isin(test_list)]
-
-#     y_train = tvd[target].values
-#     y_test = osd[target].values
-
-#     feature_list = list(set(df.columns) - set([target]))
-
-#     if exclusions is not None:
-#         feature_list = list(set(feature_list) - set(exclusions))
-
-#     X_train = tvd[feature_list].values
-#     X_test = osd[feature_list].values
-
-#     train_id = tvd[id].values
-#     test_id = osd[id].values
-
-#     return (X_train, X_test, y_train, y_test, train_id, test_id)
