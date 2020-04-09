@@ -18,7 +18,16 @@ import time
 # Data Types
 #----------------------------------------------------------------------
 def get_type_dict(df):
-    """Return a dictionary {dtype: [list of variable names]}"""
+    """
+        Return a dtype dictionary 
+        Parameters
+        ----------
+        df: data frame
+
+        Returns
+        -------
+        {dtype: [list of variable names]}
+    """
     
     uniquetypes = set(df.dtypes)
     typeDict = {}
@@ -26,13 +35,22 @@ def get_type_dict(df):
         typeDict[str(dt)] = [c for c in df.columns if df[c].dtype == dt]
     return (typeDict)
 
-def get_column_type(df, col):
-    """Return dtype of the specified column"""
-    return (df[col].dtype)
+# def get_column_type(df, col):
+#     """Return dtype of the specified column"""
+#     return (df[col].dtype)
 
 
 def get_type_tuple(df):
-    """Return a list [(colunm name, datatype)]"""
+    """
+        Parameters
+        ----------
+        df: data frame
+
+        Returns
+        -------
+        Return a list [(colunm name, datatype)]
+
+    """
     return([(c, df[c].dtype) for c in df.columns])
 
 
@@ -74,7 +92,14 @@ def get_categorical_column(df, exclusions=None, index=False, max_distinct=15, cu
 
 
 def get_non_categorical_column(df, exclusions=None, index=False, max_distinct=15, cutoff = 0.05):
-    """Return [list of non categorical column]"""
+    """
+        Return [list of non categorical column]
+        
+        Categorical column is either:
+        1) non-numerical
+        2) numeric but small number of finite values
+    
+    """
     
     if exclusions is None:
         exclusions = []
@@ -110,12 +135,24 @@ def get_non_numerical_column(df, index=False):
     else:
         return (cols)
 
-def get_column_type(df):
-    """Return dict of type: binary, categorial or Numerical"""
+def get_column_type(df, max_distinct=15, cutoff=0.01):
+    """
+        Return dict of type: binary, categorial or Numerical
+        Parameters
+        ----------
+        df : dataframe
+
+        Returns
+        -------
+        {binary: [list of cols], 
+        categorical: [list of cols], 
+        numerical: [list of cols]}
+
+    """
 
     unique_map = count_unique_values(df)
     # binary col are categorical but has only two distinct values
-    categorical_col = get_categorical_column(df)
+    categorical_col = get_categorical_column(df, max_distinct=max_distinct, cutoff=cutoff)
     numerical_col = list(set(df.columns) - set(categorical_col))
     
     binary_col = [ col for col in categorical_col if unique_map[col] == 2]
@@ -127,12 +164,35 @@ def get_column_type(df):
 #----------------------------------------------------------------------
 # Count
 #----------------------------------------------------------------------
-def get_distinct_value(df, col):
-    """Return distinct values of the given column"""
-    return (df[col].unique())
+# def get_distinct_value(df, col):
+#     """Return distinct values of the given column"""
+#     return (df[col].unique())
+
+def get_distinct_value(df, cols=None):
+    """
+        Return list of distinct values of a dataframe
+        Parameters
+        ----------
+        df : dataframe
+        col: string
+
+        Returns
+        -------
+    """
+
+    if not cols:
+        cols = df.columns
+
+    return dict(( col, df[col].unique()) for col in cols)
 
 def count_unique_values(df, prop=False, subset=None, dropna=True):
-    """Return a dictionary {column name, num_unique_values}"""
+    """
+        Return a dictionary of num unique values for each column
+
+        Returns
+        -------
+        {column name, num_unique_values}
+    """
     
     if subset is None:
         subset = df.columns
@@ -148,7 +208,14 @@ def count_unique_values(df, prop=False, subset=None, dropna=True):
     return (df[subset].T.apply(f, axis=1).to_dict())
 
 def count_levels(df, cols=None, prop=False, dropna=False):
-    """Return a dictionary {column_name: list((unique_value, count)}"""
+    """
+        Count the number of occurences for each unique value
+        for each column
+    
+        Returns
+        -------
+        {column_name: list((unique_value, count)}
+    """
     
     result = {}
     if cols is None:
@@ -161,11 +228,22 @@ def count_levels(df, cols=None, prop=False, dropna=False):
         x = df[c].value_counts(dropna = dropna)
         if prop:
             total = sum(x.values)
-            result[c] = ut.robustsort(list(zip(x.index, x.values / total)), g)
+            # FIXME: replace robust sort
+            result[c] = ut.select_and_sort(list(zip(x.index, x.values / total)), g)
         else:
-            result[c] = ut.robustsort(list(zip(x.index, x.values)), g)
+            result[c] = ut.select_and_sort(list(zip(x.index, x.values)), g)
         
     return result
+
+def any_missing(df):
+    """predicate if any column has missing values"""
+    cnt = count_missing(df)
+    return sum(cnt.values()) > 0
+
+def get_missing_columns(df):
+    "get list of columns with missing values"
+    cnt = count_missing(df)
+    return [k for k in cnt.keys() if cnt[k] > 0]
 
     
 def count_missing(df, prop=False): 
@@ -177,42 +255,34 @@ def count_missing(df, prop=False):
         result = df.isnull().sum() / df.shape[0]
         return (result.to_dict())
 
+# def summary(df, max_distinct=15, cutoff=0.05):
+#     result = pd.DataFrame()
+#     numericalCols = get_numerical_column(df)
+#     categoricalCols = get_categorical_column(df, max_distinct=max_distinct, cutoff=cutoff)
+#     nonCategoricalCols = get_non_categorical_column(df, max_distinct=max_distinct, cutoff=cutoff)
+#     d = {
+#         'unique_values': count_unique_values(df),
+#         'num_missing': count_missing(df),
+#         'numerical': dict(zip(df.columns, map(lambda x: x in numericalCols, list(df.columns)))),
+#         'categorical': dict(zip(df.columns, map(lambda x: x in categoricalCols, list(df.columns)))),
+#         'non_categorical': dict(zip(df.columns, map(lambda x: x in nonCategoricalCols, list(df.columns)))),
+#     }
+#     return pd.DataFrame(data=d)
+
 def summary(df, max_distinct=15, cutoff=0.05):
+    "statistical summary of the data frame"
+
     result = pd.DataFrame()
-    numericalCols = get_numerical_column(df)
-    categoricalCols = get_categorical_column(df, max_distinct=max_distinct, cutoff=cutoff)
-    nonCategoricalCols = get_non_categorical_column(df, max_distinct=max_distinct, cutoff=cutoff)
+    coltype = get_column_type(df)
+    numericalCols = coltype['numerical']
+    categoricalCols = coltype['categorical']
+    binaryCols = coltype['binary']
     d = {
         'unique_values': count_unique_values(df),
         'num_missing': count_missing(df),
         'numerical': dict(zip(df.columns, map(lambda x: x in numericalCols, list(df.columns)))),
         'categorical': dict(zip(df.columns, map(lambda x: x in categoricalCols, list(df.columns)))),
-        'non_categorical': dict(zip(df.columns, map(lambda x: x in nonCategoricalCols, list(df.columns)))),
+        'binary': dict(zip(df.columns, map(lambda x: x in binaryCols, list(df.columns)))),     
     }
     return pd.DataFrame(data=d)
-
     
-#============================================================
-# plotting
-#============================================================
-def plot_top_counts(data, ishor=False):
-    keys = [item[0] for item in data]
-    values = [item[1] for item in data]
-    if ishor == False:
-        df = pd.DataFrame({'categories': keys, 'counts': values})
-        ax = df.plot.bar(x='categories', y='counts', rot=0)
-    else:
-        keys.reverse()
-        values.reverse()
-        df = pd.DataFrame({'categories': keys, 'counts': values})
-        ax = df.plot.barh(x='categories', y='counts', rot=0)
-
-def plot_series(s, ishor=False):
-    "bar chart for series"
-    if ishor == True:
-        s = s.sort_values(ascending=True)
-        df = pd.DataFrame(s).plot.barh()
-    else:
-        df = pd.DataFrame(s).plot.bar()
-
-

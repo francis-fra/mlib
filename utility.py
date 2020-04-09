@@ -20,12 +20,13 @@ import explore as ex
 #-------------------------------------------------------------------------
 # Loading Data
 #-------------------------------------------------------------------------
-def load_csv(source, row=None, na_values=['?', '']):
-    df = pd.read_csv(source, nrows=row, na_values=na_values)
-    return df
+# def load_csv(source, row=None, na_values=['?', '']):
+#     df = pd.read_csv(source, nrows=row, na_values=na_values)
+#     return df
 
 
 def load_td(source, cnxn, row=None):
+    "load single table from td"
     # print("Loading TD data from {}...\n".format(source))
     if row is not None:
         sql = "select top {} * from {}".format(row, source)
@@ -36,28 +37,48 @@ def load_td(source, cnxn, row=None):
     return df
 
 def connect_td():
+    "get td cursor"
     pwd = os.environ['TDPASS']
     uid = getpass.getuser()
     connectparam = "DSN=tdp5;UID={};PWD={}".format(uid, pwd)
     cnxn = pyodbc.connect(connectparam)
     return cnxn
         
-def widedf_to_talldf(df, id_vars=['Segment']):
-    "convert wide to tall data frame"
+# deprecated: use pd.melt
+# def widedf_to_talldf(df, id_vars=['Segment']):
+#     """
+#         convert wide to tall data frame
+#         columns in id_vars are suppressed
+#     """
     
-    df.reset_index(level=0, inplace=True)
-    df = pd.melt(df, id_vars=id_vars)
-    
-    return df
+#     df.reset_index(level=0, inplace=True)
+#     df = pd.melt(df, id_vars=id_vars)
+#     return df
 
 
-def discretize_column(df, colname, append_column=True, num_bins=3, suffix ='GRP', group_labels=['Low', 'Mid', 'High']):
-    "bin columns into groups and append to df"
+# def discretize_column(df, colname, append_column=True, num_bins=3, suffix ='GRP', group_labels=['Low', 'Mid', 'High']):
+#     "bin single column into groups and append to df"
     
-    # assume this is not a categorical column
-    tmp = pd.qcut(df[colname], num_bins, retbins=False, duplicates='drop')
-    if len(tmp.cat.categories) == len(group_labels):
-        tmp.cat.categories = group_labels          
+#     # assume this is not a categorical column
+#     tmp = pd.qcut(df[colname], num_bins, retbins=False, duplicates='drop')
+#     if len(tmp.cat.categories) == len(group_labels):
+#         tmp.cat.categories = group_labels          
+#     if not append_column:
+#         return tmp
+#     else:
+#         newcolname = colname + '_' + suffix
+#         df[newcolname] = tmp
+#         return df
+
+def discretize_column(df, colname, append_column=True, num_bins=3, suffix ='GRP', group_labels=None):
+    "bin single column into groups and append to df"
+    
+    if group_labels is None:
+        labels = False
+    else:
+        labels = group_labels
+    tmp = pd.qcut(df[colname], num_bins, retbins=False, duplicates='drop', labels=labels)
+        
     if not append_column:
         return tmp
     else:
@@ -65,7 +86,8 @@ def discretize_column(df, colname, append_column=True, num_bins=3, suffix ='GRP'
         df[newcolname] = tmp
         return df
 
-def discretize_dataframe(df, varList=None, return_all=False, num_bins=3, suffix ='GRP', group_labels=['Low', 'Mid', 'High']):
+def discretize_dataframe(df, varList=None, append_column=False, num_bins=3, suffix ='GRP', 
+                            group_labels=None):
     "discretize subset of columns"
     
     if varList is None:
@@ -75,7 +97,6 @@ def discretize_dataframe(df, varList=None, return_all=False, num_bins=3, suffix 
     frames = []
     
     for var in varList:
-        print('Binning {}'.format(var))
         if var in categorical_cols:
             frames.append(df[var])
         else:
@@ -83,43 +104,77 @@ def discretize_dataframe(df, varList=None, return_all=False, num_bins=3, suffix 
             tmp.name = var + '_' + suffix
             frames.append(tmp)    
 
-    # new frames
+    # return new frames
     result = pd.concat(frames, axis=1)
-    if not return_all:
+    if not append_column:
         return result
     else:
         return pd.concat([df, result], axis=1)
     
 
+#------------------------------------------------------------
+# Date
+#------------------------------------------------------------
 def datestr2date(x, date_format='%Y-%m-%d'):
-    "convert date string to date object"
+    """
+        convert date string to date object
+
+        Parameters
+        ----------
+        x: string or datetime object
+
+        Returns
+        -------
+        datetime object
+    """
 
     if isinstance(x, list):
         return [datetime.strptime(item, date_format).date() for item in x]
     else:
         return datetime.strptime(x, date_format).date()
 
+def shift_by_month(current_month, latency, format='%Y-%m-%d'):
+    """
+        shift the month by the latency
 
-def shift_month(df, col, latency):
-    "shift the month of the date column"
+        Parameters
+        ----------
+        current_month: datetime or string object
+        latency: integer
+        format: date format
 
-    def shift_by_month(current_month, latency, format='%Y-%m-%d'):
-        "shift the month by the latency"
+        Returns
+        -------
+        datetime object
+    """
+    if isinstance(current_month, str):
+        current_month = datetime.strptime(current_month, format).date()
 
-        if isinstance(current_month, str):
-            current_month = datetime.strptime(current_month, format).date()
+    shifted_month = current_month + dateutil.relativedelta.relativedelta(months=latency)
+    return (shifted_month)
 
-        shifted_month = current_month + dateutil.relativedelta.relativedelta(months=latency)
-        return (shifted_month)
+# Deprecated: use  df['col'].apply(ut.shift_by_month, args=(2,))
+# def shift_month(df, col, latency):
+#     "shift the month of the date column"
 
-    shift_by_latency = functools.partial(shift_by_month, latency=latency)
-    newdf = df.copy()
-    newdf[col] = newdf[col].map(shift_by_latency)
-    return (newdf)
+#     shift_by_latency = functools.partial(shift_by_month, latency=latency)
+#     newdf = df.copy()
+#     newdf[col] = newdf[col].map(shift_by_latency)
+#     return (newdf)
 
 
 class DiscreteSampler:
-    """Discrete value sampler"""
+    """
+        Discrete value sampler
+        Parameters
+        ----------
+        populations: list of finite values
+        weights: weight assigned to the populations
+
+        Returns
+        -------
+        random choice based on the pdf
+    """
 
     def __init__(self, population, weights):
         self.weights = weights
@@ -181,13 +236,14 @@ def create_missing_columns(df, cols=None, p=0.05):
     num_missing = round(num_rows * p)
     for cl in cols:
         idx = np.random.choice(num_rows, num_missing, replace=False).tolist()
-        newdf = newdf.set_value(idx, cl, None)
+        # FIXME: deprecated
+        # newdf = newdf.set_value(idx, cl, None)
+        newdf.at[idx,cl] = None
 
     return (newdf)
 
-
-def robustsort(x, select=lambda x: x):
-    """Sorting: Items with None are placed at the end
+def select_and_sort(x, select=lambda x: x):
+    """Sorting: 
 
         Parameters
         ----------
@@ -199,7 +255,6 @@ def robustsort(x, select=lambda x: x):
         x_new  : sorted list
 
     """
-
     clean = list(filter(lambda item:
                         (select(item) is not None and select(item) is not np.nan), x))
 
@@ -207,15 +262,16 @@ def robustsort(x, select=lambda x: x):
     result = sorted(clean) + dirty
     return (result)
 
+
 #---------------------------------------------------------------------
-# Debug print for Debug Transformer
+# Debug print functions for Debug Transformer
 #---------------------------------------------------------------------
 def show_row(X, idx, text=None):
     # X is a data frame
     if text is not None:
         print(text, "=" * 40)
     if isinstance(X, pd.core.frame.DataFrame):
-        print(X.ix[idx])
+        print(X.iloc[idx])
     elif isinstance(X, np.ndarray):
         print(X[idx])
     else:
@@ -247,7 +303,21 @@ def remove_values(df, col, values, dropna=True):
 # Extract
 #----------------------------------------------------------------------
 def extract_feature_target(df, target, todf=True, exclusions=None):
-    """Separate feature set and target as ndarrays"""
+    """
+        Separate feature set and target as ndarrays
+
+        Parameters
+        ----------
+        df: data frame
+        target: column name in string
+
+        Returns
+        -------
+        X: All columns except target 
+        y: target column
+        features: list of column names except target
+
+    """
 
     if exclusions is None:
         exclusions= []
@@ -257,7 +327,9 @@ def extract_feature_target(df, target, todf=True, exclusions=None):
     # convert as ndarray
     # dtype changed - all object
     if todf == False:
-        y = df[[target]].ix[:, 0].values
+        # y = df[[target]].ix[:, 0].values
+        y = df[[target]].to_numpy()
+        y = y.reshape(-1)
         X = df[features].values
     else:
         y = df[[target]]
@@ -265,15 +337,11 @@ def extract_feature_target(df, target, todf=True, exclusions=None):
 
     return (X, y, features)
 
-# def get_unique_values(df, col):
-#     "get unique values of the given col"
-
-#     return list(df[col].unique())
-
 #----------------------------------------------------------------------
 # split training / testing data for data frame
 #----------------------------------------------------------------------
 
+# FIXME: program to the abstraction...
 def create_feature_tables(feature_df, target_df, all_df,
                           train_ref_month, test_ref_month,
                           id='customer_id', time_id = 'ref_month', target_col='target_f',
@@ -323,33 +391,83 @@ def create_feature_tables(feature_df, target_df, all_df,
     else:
         return (trainData, testData)
 
-def get_LabelBinarizer_index(lb, target):
-    "get the encoded index of the specified target"
+# deprecated: use transformer
+# def get_LabelBinarizer_index(lb, target):
+#     "get the encoded index of the specified target"
 
-    classes = lb.classes_
-    # to determine the encoded target index
-    try:
-        idx = int(np.where(lb.classes_ == target)[0])
-    except:
-        idx = -1
+#     classes = lb.classes_
+#     # to determine the encoded target index
+#     try:
+#         idx = int(np.where(lb.classes_ == target)[0])
+#     except:
+#         idx = -1
+#     return (idx)
 
-    return (idx)
 
+# def split_train_test_by_id(data, test_ratio, id_column):
 
-def split_train_test_by_id(data, test_ratio, id_column):
+#     def test_set_check(identifier, test_ratio):
+#         return crc32(np.int64(identifier)) & 0xffffffff < test_ratio * 2**32
 
-    def test_set_check(identifier, test_ratio):
-        return crc32(np.int64(identifier)) & 0xffffffff < test_ratio * 2**32
-
-    ids = data[id_column]
-    in_test_set = ids.apply(lambda id_: test_set_check(id_, test_ratio))
-    return data.loc[~in_test_set], data.loc[in_test_set]
+#     ids = data[id_column]
+#     in_test_set = ids.apply(lambda id_: test_set_check(id_, test_ratio))
+#     return data.loc[~in_test_set], data.loc[in_test_set]
 
 
 def npslice(arr, begin, size):
-    "tf.slice for numpy"
+    """
+        tf.slice for numpy
+
+        t = tf.constant([[[1, 1, 1], [2, 2, 2]],
+                    [[3, 3, 3], [4, 4, 4]],
+                    [[5, 5, 5], [6, 6, 6]]])
+        tf.slice(t, [1, 0, 0], [1, 1, 3])  # [[[3, 3, 3]]]
+        tf.slice(t, [1, 0, 0], [1, 2, 3])  # [[[3, 3, 3],
+                                        #   [4, 4, 4]]]
+        tf.slice(t, [1, 0, 0], [2, 1, 3])  # [[[3, 3, 3]],
+                                        #  [[5, 5, 5]]] 
+    """
     ending = [sum(x) for x in zip(begin, size)]
     rng = list(zip(begin, ending))
     idx = [slice(*list(tup)) for tup in rng]   
     return arr[tuple(idx)]
 
+def one_hot_encoded(class_numbers, num_classes=None):
+    """
+    Generate the One-Hot encoded class-labels from an array of integers.
+
+    For example, if class_number=2 and num_classes=4 then
+    the one-hot encoded label is the float array: [0. 0. 1. 0.]
+
+    Parameters
+    ----------
+    :param class_numbers:
+        Array of integers with class-numbers.
+        Assume the integers are from zero to num_classes-1 inclusive.
+
+    :param num_classes:
+        Number of classes. If None then use max(class_numbers)+1.
+
+    :return:
+        2-dim array of shape: [len(class_numbers), num_classes]
+    """
+
+    # Find the number of classes if None is provided.
+    # Assumes the lowest class-number is zero.
+    if num_classes is None:
+        num_classes = np.max(class_numbers) + 1
+
+    return np.eye(num_classes, dtype=float)[class_numbers]
+
+def one_hot_decoded(X):
+    """
+        One Hot Decoded: reverse of one_hot_encoded
+        Parameters
+        ----------
+        X: 2D matrix in which only a single 1 in each row
+
+        Returns
+        -------
+        list of integers
+    """
+    return [np.argmax(row, axis=0) for row in X]
