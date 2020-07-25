@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from collections import defaultdict
 import sys, os
 # import pyodbc, getpass
 from operator import itemgetter
@@ -10,7 +11,8 @@ class Categorizer(object):
     def __init__(self, df, target_col, num_bins=5, savefile=None):
 
         assert num_bins > 1 and num_bins <= 9, "numbins must be greater than 1 and less than 10"
-        self.target_col = target_col
+        # all columns are in uppercase
+        self.target_col = target_col.upper()
         self.num_bins = num_bins
         self.df = df
         self.savefile = savefile
@@ -18,39 +20,63 @@ class Categorizer(object):
         self.col_uppercase()
         self.unique_values = self.count_unique_values()
 
-    def count_unique_values(self, df=None, prop=False, subset=None, dropna=True):
-        """Return a dictionary {column name, num_unique_values}"""
+    # def count_unique_values(self, df=None, prop=False, subset=None, dropna=True):
+    #     """Return a dictionary {column name, num_unique_values}"""
+    #     if df is None:
+    #         df = self.df
+    #     if subset is None:
+    #         subset = df.columns
+    #     if (isinstance(subset, str)):
+    #         subset = [subset]
+    #     if prop == False:
+    #         f = lambda x: x.nunique(dropna)
+    #     else:
+    #         f = lambda x: x.nunique(dropna) / df.shape[0]
+    #     return (df[subset].T.apply(f, axis=1).to_dict())
+
+    def crosstab_all(self, df=None, exclusions=None):
+        "cross tab all columns"
         if df is None:
             df = self.df
-        if subset is None:
-            subset = df.columns
-        if (isinstance(subset, str)):
-            subset = [subset]
-        if prop == False:
-            f = lambda x: x.nunique(dropna)
+        if exclusions is None:
+            exclusions = [self.target_col]
         else:
-            f = lambda x: x.nunique(dropna) / df.shape[0]
-        return (df[subset].T.apply(f, axis=1).to_dict())
+            exclusions = exclusions.append(self.target_col)
+
+        type_dict = self.get_df_column_type(df, exclusions=exclusions)
+        numerical_columns = type_dict['numerical']
+        categorical_columns = type_dict['categorical']
+        binary_columns = type_dict['binary']
+
+        result = defaultdict() 
+        for col in numerical_columns:
+            data = self.get_crosstab(col, categorical=False).to_json()
+            result[col] = data
+        for col in categorical_columns:
+            data = self.get_crosstab(col, categorical=True).to_json()
+            result[col] = data
+        for col in binary_columns:
+            data = self.get_crosstab(col, categorical=True).to_json()
+            result.append(data)
+
+        return result
+        
 
     def get_crosstab(self, colname, categorical=False):
         '''
             profile one single variable
             Calculates the cross table or KL divergence
 
-            :param: var_name  : column name prefix in resultant data frame
-            :param: raw_count : cross table (if True), KL diverence otherwise
+            :param: colname  : name of column to be categorized
             :param: categorical: True if colname is a categorical variable
         '''
         df = self.df
         num_bins = self.num_bins
         target_col = self.target_col
         num_unique = self.unique_values
-        # num_unique = self.count_unique_values(df, subset=target_col)
         if not categorical:
             tmp = pd.qcut(df[colname], num_bins, retbins=True, duplicates='drop')
             profile = pd.crosstab(df[target_col], tmp[0])
-            # rename binned columns
-            # newcolname = [var_name + '_' + str(v) for v in range(profile.shape[1])]
             maxval = profile.shape[1]
             newcolname = self.get_category_name(maxval)
             profile.columns = newcolname
@@ -92,29 +118,107 @@ class Categorizer(object):
             f = lambda x: x.nunique(dropna) / df.shape[0]
         return (df[subset].T.apply(f, axis=1).to_dict())
 
+    def get_df_column_type(self, df=None, exclusions=None, max_distinct=15, cutoff=0.01):
+        """
+            Return dict of type: binary, categorial or Numerical
+            Parameters
+            ----------
+            df : dataframe
 
-    def get_df_column_type(self, df=None, exclusions=None):
-        "identify column type based on MDM naming scheme"
-        def get_column_type(colname):
-            """
-                'B': binary, 'C': categorical, 'N': numeric
-            """
-            return colname[2].upper()
+            Returns
+            -------
+            {binary: [list of cols], 
+            categorical: [list of cols], 
+            numerical: [list of cols]}
 
+        """
         if df is None:
             df = self.df
         if exclusions is None:
             exclusions = []
         cols = list(set(df.columns) - set(exclusions))
-        col_type = [get_column_type(x) for x in cols]
-        col_dict = dict(zip(cols, col_type))
 
-        unique_types = {'Binary': 'B', 'Categorical': 'C', 'Numerical': 'N'}
-        typeDict = {}
-        for key in unique_types.keys():
-            typeDict[key] = [c for c in cols if col_dict[c] == unique_types[key]]
+        unique_map = self.count_unique_values(df)
+        # binary col are categorical but has only two distinct values
+        categorical_col = self.get_categorical_column(df, exclusions=exclusions, max_distinct=max_distinct, cutoff=cutoff)
+        numerical_col = list(set(cols) - set(categorical_col))
+        
+        binary_col = [ col for col in categorical_col if unique_map[col] == 2]
+        categorical_col = list(set(categorical_col) - set(binary_col))
 
-        return typeDict
+        return {'binary': binary_col, 'categorical': categorical_col, 'numerical': numerical_col}
+
+    # def get_df_column_type(self, df=None, exclusions=None):
+    #     "identify column type based on MDM naming scheme"
+    #     def get_column_type(colname):
+    #         """
+    #             'B': binary, 'C': categorical, 'N': numeric
+    #         """
+    #         return colname[2].upper()
+
+    #     if df is None:
+    #         df = self.df
+    #     if exclusions is None:
+    #         exclusions = []
+    #     cols = list(set(df.columns) - set(exclusions))
+    #     col_type = [get_column_type(x) for x in cols]
+    #     col_dict = dict(zip(cols, col_type))
+
+    #     unique_types = {'Binary': 'B', 'Categorical': 'C', 'Numerical': 'N'}
+    #     typeDict = {}
+    #     for key in unique_types.keys():
+    #         typeDict[key] = [c for c in cols if col_dict[c] == unique_types[key]]
+
+    #     return typeDict
+
+    def get_non_numerical_column(self, df=None, index=False):
+        """Return [list of numerical column]"""
+        
+        if df is None:
+            df = self.df
+        cols = list(set(df.columns) - set(df._get_numeric_data().columns.tolist()))
+        if index == True:
+            return [df.columns.get_loc(x) for x in cols]
+        else:
+            return (cols)
+
+    def get_categorical_column(self, df=None, exclusions=None, index=False, max_distinct=15, cutoff = 0.01):
+        """
+            Return [list of categorical column]
+            
+            Categorical column is either:
+            1) non-numerical
+            2) numeric but small number of finite values
+        
+        """
+        
+        if df is None:
+            df = self.df
+        if exclusions is None:
+            exclusions = []
+            
+        if (isinstance(exclusions, str)):
+            exclusions = [exclusions]
+            
+        result = []
+        result += self.get_non_numerical_column(df)
+        
+        # dictionary of unique values proportion
+        d = self.count_unique_values(df, prop=True)
+        c = self.count_unique_values(df, prop=False)
+        
+        small_prop_set = [k for (k, v) in d.items() if v < cutoff]
+        small_finite_set = [k for (k, v) in c.items() if v < max_distinct]
+
+        # AND condition
+        result += list(set(small_prop_set) & set(small_finite_set))
+        
+        result = list(set(result) - set(exclusions))
+
+        if index == False:
+            return (result)
+        else:
+            return [df.columns.get_loc(x) for x in result]
 
     def col_uppercase(self):
         self.df.columns = self.df.columns.map(lambda x: x.upper())
@@ -142,8 +246,8 @@ class Categorizer(object):
         num_bins = self.num_bins
         type_dict = self.get_df_column_type(df, exclusions=exclusions)
 
-        numerical_columns = type_dict['Numerical']
-        binary_columns = type_dict['Binary']
+        numerical_columns = type_dict['numerical']
+        binary_columns = type_dict['binary']
         for col in numerical_columns:
             df[col] = pd.qcut(df[col], num_bins, duplicates='drop', labels=False)
             # num unique values
@@ -229,7 +333,7 @@ if __name__ == "__main__":
         df = bprofile.categorize(exclusions=args.exclude)
     else:
         type_dict = bprofile.get_df_column_type(df, exclusions=args.exclude)
-        numerical_columns = type_dict['Numerical']
+        numerical_columns = type_dict['numerical']
         is_numeric = args.profile in numerical_columns
         df = bprofile.get_likelihood(args.profile, not is_numeric)
 
