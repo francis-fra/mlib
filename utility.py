@@ -6,7 +6,8 @@ Utility functions for model building
 """
 import os, sys, random
 import bisect
-from zlib import crc32
+import pyodbc
+# from zlib import crc32
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -20,63 +21,119 @@ import explore as ex
 #-------------------------------------------------------------------------
 # Loading Data
 #-------------------------------------------------------------------------
-# def load_csv(source, row=None, na_values=['?', '']):
-#     df = pd.read_csv(source, nrows=row, na_values=na_values)
-#     return df
 
+def load_td(source, cnxn, maxNumRows=None):
+    """load single table from td
 
-def load_td(source, cnxn, row=None):
-    "load single table from td"
-    # print("Loading TD data from {}...\n".format(source))
-    if row is not None:
-        sql = "select top {} * from {}".format(row, source)
+    Parameters
+    ----------
+    source : data base schema and table name
+    cnxn : db connector
+    maxNumRows : query row limit
+
+    Returns
+    -------
+    df : data frame
+    
+    """
+    if maxNumRows is not None:
+        sql = "select top {} * from {}".format(maxNumRows, source)
     else:
         sql = "select * from {}".format(source)
 
     df = pd.read_sql(sql, cnxn)
     return df
 
-def connect_td():
-    "get td cursor"
-    pwd = os.environ['TDPASS']
-    uid = getpass.getuser()
-    connectparam = "DSN=tdp5;UID={};PWD={}".format(uid, pwd)
-    cnxn = pyodbc.connect(connectparam)
+def connect_td(uid=None, passwd=None, dsn="tdp5"):
+    """get td connector
+
+    Parameters
+    ----------
+    uid : user id
+    passwd : password
+    dsn : db name
+
+    Returns
+    -------
+    cnxn : TDP5 connector
+    
+    """
+
+    try:
+        if passwd is None:
+            passwd = os.environ['TDPASS']
+        if uid is None:
+            # uid = getpass.getuser()
+            uid = os.environ['USERNAME']
+    except:
+        return None
+
+    connect_param = "DSN={};UID={};PWD={}".format(dsn, uid, passwd)
+    cnxn = pyodbc.connect(connect_param)
     return cnxn
-        
-# deprecated: use pd.melt
-# def widedf_to_talldf(df, id_vars=['Segment']):
-#     """
-#         convert wide to tall data frame
-#         columns in id_vars are suppressed
-#     """
+
+#------------------------------------------------------------
+# Data Frame
+#------------------------------------------------------------
+def extract_and_count(df, filter_col, value, target_col):
+    """count target values for a particular value in a particular field
+
+    counts values from the target column conditioned
+    on rows which contain the specific value in a specific column
     
-#     df.reset_index(level=0, inplace=True)
-#     df = pd.melt(df, id_vars=id_vars)
-#     return df
+    Parameters
+    ----------
+    df: data frame
+    sel_col: column name for filtering
+    value : value to be selected from sel_col
+    target_col : name of column to be counted
+
+    Returns:
+    --------
+    histogram of values in the targeted column
+    
+    """
+    return df[df[sel_col] == value][target_col].value_counts()
+
+# FIXME: parametize groupby field
+def extract_and_plot(df, field, value):
+    time_grp = df[df[field] == value].groupby(df.time_in_hour)
+    num_visits = time_grp.count().bytes
+    plt.plot(num_visits.index, num_visits)
+    plt.gcf().autofmt_xdate()
+    
+# FIXME: parametize sort function
+def get_top_counts(data, field, limits):
+    """show the values in descending order"""
+    arr = data[field]
+    arr.sort(key=lambda x: -x[1])
+    return arr[:limits]
 
 
-# def discretize_column(df, colname, append_column=True, num_bins=3, suffix ='GRP', group_labels=['Low', 'Mid', 'High']):
-#     "bin single column into groups and append to df"
-    
-#     # assume this is not a categorical column
-#     tmp = pd.qcut(df[colname], num_bins, retbins=False, duplicates='drop')
-#     if len(tmp.cat.categories) == len(group_labels):
-#         tmp.cat.categories = group_labels          
-#     if not append_column:
-#         return tmp
-#     else:
-#         newcolname = colname + '_' + suffix
-#         df[newcolname] = tmp
-#         return df
+
 
 def discretize_column(df, colname, append_column=True, num_bins=3, suffix ='GRP', group_labels=None):
-    "bin single column into groups and append to df"
+    """bin single column into groups and append to df
+    
+    Parameters
+    ----------
+    df: data frame
+    colname : column name in string
+    append_column : return only the binned column if False
+    num_bins : num of bins
+    suffix : suffix name given to the new column if appended
+    group_labels : labels given to the categorical bins
+
+    Returns
+    -------
+    df : data frame
+    """
     
     if group_labels is None:
         labels = False
     else:
         labels = group_labels
+
     tmp = pd.qcut(df[colname], num_bins, retbins=False, duplicates='drop', labels=labels)
         
     if not append_column:
@@ -88,7 +145,21 @@ def discretize_column(df, colname, append_column=True, num_bins=3, suffix ='GRP'
 
 def discretize_dataframe(df, varList=None, append_column=False, num_bins=3, suffix ='GRP', 
                             group_labels=None):
-    "discretize subset of columns"
+    """discretize subset of columns
+    
+    Parameters
+    ----------
+    df: data frame
+    varList : list of columns to bin
+    append_column : return only the binned column if False
+    num_bins : num of bins
+    suffix : suffix name given to the new column if appended
+    group_labels : labels given to the categorical bins
+
+    Returns
+    -------
+    df : data frame
+    """
     
     if varList is None:
         varList = df.columns
@@ -122,6 +193,7 @@ def datestr2date(x, date_format='%Y-%m-%d'):
         Parameters
         ----------
         x: string or datetime object
+        date_format : date format in string
 
         Returns
         -------
@@ -139,9 +211,9 @@ def shift_by_month(current_month, latency, format='%Y-%m-%d'):
 
         Parameters
         ----------
-        current_month: datetime or string object
-        latency: integer
-        format: date format
+        current_month : base month shifting from (datetime or string object)
+        latency : integer, num month to shift
+        format : date format in string
 
         Returns
         -------
@@ -153,23 +225,13 @@ def shift_by_month(current_month, latency, format='%Y-%m-%d'):
     shifted_month = current_month + dateutil.relativedelta.relativedelta(months=latency)
     return (shifted_month)
 
-# Deprecated: use  df['col'].apply(ut.shift_by_month, args=(2,))
-# def shift_month(df, col, latency):
-#     "shift the month of the date column"
-
-#     shift_by_latency = functools.partial(shift_by_month, latency=latency)
-#     newdf = df.copy()
-#     newdf[col] = newdf[col].map(shift_by_latency)
-#     return (newdf)
-
-
 class DiscreteSampler:
-    """
-        Discrete value sampler
+    """ Discrete value sampler
+
         Parameters
         ----------
         populations: list of finite values
-        weights: weight assigned to the populations
+        weights: weight assigned to each possible value
 
         Returns
         -------
@@ -204,7 +266,7 @@ def create_artificial_col(df, val, px, colname):
         ----------
                 df     : data frame
                 val    : list of possible value to choose from
-                px     : prob of each value
+                px     : list of prob of each value
                 colname: name of the new column
         Returns
         -------
@@ -223,7 +285,18 @@ def create_artificial_col(df, val, px, colname):
     return (newdf)
 
 def create_missing_columns(df, cols=None, p=0.05):
-    """Return a new data frame by filling the specified columns with missing values"""
+    """Return a new data frame by filling the specified columns with missing values
+    
+        Parameters
+        ----------
+        df : data frame
+        cols : columns to be filled with missing values
+        p : prob of missing values
+
+        Returns
+        -------
+        df : new data frame
+    """
 
     if cols is None:
         cols = df.columns
@@ -243,7 +316,7 @@ def create_missing_columns(df, cols=None, p=0.05):
     return (newdf)
 
 def select_and_sort(x, select=lambda x: x):
-    """Sorting: 
+    """Sort a list with priority given to non None and non NaN values
 
         Parameters
         ----------
@@ -264,10 +337,17 @@ def select_and_sort(x, select=lambda x: x):
 
 
 #---------------------------------------------------------------------
-# Debug print functions for Debug Transformer
+# TORM: Debug print functions for Debug Transformer
 #---------------------------------------------------------------------
 def show_row(X, idx, text=None):
-    # X is a data frame
+    """ show a row of a data frame of ndarray
+
+        Parameters
+        ----------
+        X: data frame or ndarray
+        idx: row index
+
+    """
     if text is not None:
         print(text, "=" * 40)
     if isinstance(X, pd.core.frame.DataFrame):
@@ -277,27 +357,36 @@ def show_row(X, idx, text=None):
     else:
         raise ValueError("input is neither a data frame nor numpy array")
 
-# FIXME:
-# def show_count_levels(X, idx=None, text=None):
-#     # X is a data frame
-#     if text is not None:
-#         print("=" * 20, text, "=" * 20)
-#     print(ex.count_levels(X))
+def show_missing(X, text=None):
+    """ show number of missing values
 
-def show_missing(X, idx=None, text=None):
+        Parameters
+        ----------
+        X: data frame or ndarray
+        text: print header 
+    """
     # X is a data frame
     if text is not None:
         print("=" * 20, text, "=" * 20)
     print(ex.count_missing(X))
 
 def remove_values(df, col, values, dropna=True):
+    """ filter the given values from a given column
+
+        Parameters
+        ----------
+        df : data frame 
+        col : column name
+        values : values to be filtered
+        dropna : to drop NA values or not
+    """
     # remove if true
     rmidx = df[col].isin(values)
     if dropna == True:
         nanidx = df[col].isna()
-        # union
-    else:
-        return df[~rmidx]
+        # union of nanidx and rmidx
+        rmidx = list(set().union(nanidx, rmidx))
+    return df[~rmidx]
 
 #----------------------------------------------------------------------
 # Extract
@@ -391,33 +480,12 @@ def create_feature_tables(feature_df, target_df, all_df,
     else:
         return (trainData, testData)
 
-# deprecated: use transformer
-# def get_LabelBinarizer_index(lb, target):
-#     "get the encoded index of the specified target"
-
-#     classes = lb.classes_
-#     # to determine the encoded target index
-#     try:
-#         idx = int(np.where(lb.classes_ == target)[0])
-#     except:
-#         idx = -1
-#     return (idx)
-
-
-# def split_train_test_by_id(data, test_ratio, id_column):
-
-#     def test_set_check(identifier, test_ratio):
-#         return crc32(np.int64(identifier)) & 0xffffffff < test_ratio * 2**32
-
-#     ids = data[id_column]
-#     in_test_set = ids.apply(lambda id_: test_set_check(id_, test_ratio))
-#     return data.loc[~in_test_set], data.loc[in_test_set]
-
 
 def npslice(arr, begin, size):
-    """
-        tf.slice for numpy
+    """ tf.slice like function for ndarray
 
+        Examples
+        --------
         t = tf.constant([[[1, 1, 1], [2, 2, 2]],
                     [[3, 3, 3], [4, 4, 4]],
                     [[5, 5, 5], [6, 6, 6]]])
