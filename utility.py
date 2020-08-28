@@ -182,6 +182,11 @@ def discretize_dataframe(df, varList=None, append_column=False, num_bins=3, suff
     else:
         return pd.concat([df, result], axis=1)
     
+#------------------------------------------------------------
+# Series
+#------------------------------------------------------------
+def unravel(s):
+    return s.to_numpy().reshape(len(s),1)
 
 #------------------------------------------------------------
 # Date
@@ -539,3 +544,56 @@ def one_hot_decoded(X):
         list of integers
     """
     return [np.argmax(row, axis=0) for row in X]
+
+def col_upper_case(df, inplace=True):
+    """Upper case all column names
+
+        Parameters
+        ----------
+        df : data frame
+
+        Returns
+        --------
+        df : data frame
+
+    """
+    if inplace==False:
+        df = df.copy()
+    data_cols = df.columns.values.tolist()
+    df.columns = [col.upper() for col in data_cols]
+
+    return df
+
+def get_single_column(df, col):
+    """extract a flatten array
+
+        Parameters
+        ----------
+        df : data frame
+        col : column name in string
+
+        Returns
+        --------
+        ndarray
+
+    """
+    return np.ravel(df[col])
+
+def create_df(df, column_names):
+    """create data frame with exact columns
+
+       if column is missing in df, create an empty column
+       extra columns in df are removed
+
+        Parameters
+        ----------
+        df : data frame
+        column_names : column names in string
+
+        Returns
+        --------
+        df : data frame
+
+    """
+    emptydf = pd.DataFrame(columns=column_names)
+    return emptydf.append(df)[column_names]

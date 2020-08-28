@@ -18,8 +18,8 @@ import time
 # Data Types
 #----------------------------------------------------------------------
 def get_type_dict(df):
-    """
-        Return a dtype dictionary 
+    """ Return a dtype dictionary 
+
         Parameters
         ----------
         df: data frame
@@ -39,9 +39,16 @@ def get_type_dict(df):
 #     """Return dtype of the specified column"""
 #     return (df[col].dtype)
 
+def get_column_for_type(df, data_type, unselect=False):
+    "get column names of the specified type"
+    if unselect == False:
+        return [col for col in df.dtypes.index if df.dtypes.get(col) == data_type ]
+    else:
+        return [col for col in df.dtypes.index if df.dtypes.get(col) != data_type ]
 
 def get_type_tuple(df):
-    """
+    """dtype tuple
+
         Parameters
         ----------
         df: data frame
@@ -57,10 +64,23 @@ def get_type_tuple(df):
 def get_categorical_column(df, exclusions=None, index=False, max_distinct=15, cutoff = 0.01):
     """
         Return [list of categorical column]
+
+        Parameters
+        ----------
+        df: data frame
+        exculsions : list of column names to be excluded
+        index : boolean, true if return the index of categorical column
+        max_distinct : a column is categorical if num distinct values is less than max_distinct
+        cutoff : a column is categorical if proportion of distinct values is less than the cutoff
         
         Categorical column is either:
         1) non-numerical
         2) numeric but small number of finite values
+        3) including binary
+
+        Returns
+        -------
+        result : either a list of index or list of columns
     
     """
     
@@ -95,10 +115,21 @@ def get_non_categorical_column(df, exclusions=None, index=False, max_distinct=15
     """
         Return [list of non categorical column]
         
+        Parameters
+        ----------
+        df: data frame
+        exculsions : list of column names to be excluded
+        index : boolean, true if return the index of categorical column
+        max_distinct : a column is categorical if num distinct values is less than max_distinct
+        cutoff : a column is categorical if proportion of distinct values is less than the cutoff
+        
         Categorical column is either:
         1) non-numerical
         2) numeric but small number of finite values
-    
+
+        Returns
+        -------
+        result : either a list of index or list of columns
     """
     
     if exclusions is None:
@@ -118,7 +149,17 @@ def get_non_categorical_column(df, exclusions=None, index=False, max_distinct=15
         return [df.columns.get_loc(x) for x in result]
     
 def get_numerical_column(df, index=False):
-    """Return [list of numerical column]"""
+    """Return [list of numerical column]
+    
+        Parameters
+        ----------
+        df: data frame
+        index: boolean
+
+        Returns
+        -------
+        Return [list of numerical column]
+    """
     
     cols = df._get_numeric_data().columns.tolist()
     if index == True:
@@ -127,7 +168,17 @@ def get_numerical_column(df, index=False):
         return (cols)
     
 def get_non_numerical_column(df, index=False):
-    """Return [list of numerical column]"""
+    """Return [list of non numerical column]
+    
+        Parameters
+        ----------
+        df: data frame
+        index: boolean
+
+        Returns
+        -------
+        Return [list of numerical column]
+    """
     
     cols = list(set(df.columns) - set(df._get_numeric_data().columns.tolist()))
     if index == True:
@@ -164,9 +215,6 @@ def get_column_type(df, max_distinct=15, cutoff=0.01):
 #----------------------------------------------------------------------
 # Count
 #----------------------------------------------------------------------
-# def get_distinct_value(df, col):
-#     """Return distinct values of the given column"""
-#     return (df[col].unique())
 
 def get_distinct_value(df, cols=None):
     """
@@ -255,19 +303,6 @@ def count_missing(df, prop=False):
         result = df.isnull().sum() / df.shape[0]
         return (result.to_dict())
 
-# def summary(df, max_distinct=15, cutoff=0.05):
-#     result = pd.DataFrame()
-#     numericalCols = get_numerical_column(df)
-#     categoricalCols = get_categorical_column(df, max_distinct=max_distinct, cutoff=cutoff)
-#     nonCategoricalCols = get_non_categorical_column(df, max_distinct=max_distinct, cutoff=cutoff)
-#     d = {
-#         'unique_values': count_unique_values(df),
-#         'num_missing': count_missing(df),
-#         'numerical': dict(zip(df.columns, map(lambda x: x in numericalCols, list(df.columns)))),
-#         'categorical': dict(zip(df.columns, map(lambda x: x in categoricalCols, list(df.columns)))),
-#         'non_categorical': dict(zip(df.columns, map(lambda x: x in nonCategoricalCols, list(df.columns)))),
-#     }
-#     return pd.DataFrame(data=d)
 
 def summary(df, max_distinct=15, cutoff=0.05):
     "statistical summary of the data frame"
