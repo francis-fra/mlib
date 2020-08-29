@@ -26,7 +26,30 @@ from sklearn.exceptions import NotFittedError
 from sklearn.preprocessing import label_binarize
 from sklearn.multiclass import OneVsRestClassifier
 
-class ClassificationEvaluator(object):
+class BinaryClassificationEvaluator(object):
+    """Binary classification evaluator
+
+        Parameters
+        -----------
+        esimator : algorihtm
+        X_train : train data
+        y_train : train label
+        id : record id (e.g. customer id)
+        features : explanatory feature names
+        cv : num of kfold cross validation 
+        target_f : column index of the score when doing predict_prob()
+        score_method : see below
+        nsizes : plotting resolution 
+        train_now : fit estimator if set to true
+        n_jobs : CPU use
+
+        score options are ['accuracy', 'adjusted_rand_score', 'average_precision',
+                'f1', 'f1_macro', 'f1_micro', 'f1_samples', 'f1_weighted', 'neg_log_loss',
+                'neg_mean_absolute_error', 'neg_mean_squared_error', 'neg_median_absolute_error',
+                'precision', 'precision_macro', 'precision_micro', 'precision_samples',
+                'precision_weighted', 'r2', 'recall', 'recall_macro', 'recall_micro',
+                'recall_samples', 'recall_weighted', 'roc_auc']
+    """
     def __init__(self, estimator, X_train, y_train,
                  X_test, y_test, id, features, cv, target_f, score_method="roc_auc",
                  nsizes=10, train_now=False, n_jobs=-1):
@@ -38,7 +61,6 @@ class ClassificationEvaluator(object):
         self.id = id
         self.features = features
         self.cv = cv
-        # numerical index of the target
         self.target_f = target_f
         self.nsizes = nsizes
         self.n_jobs = n_jobs
@@ -62,7 +84,7 @@ class ClassificationEvaluator(object):
         assert(isinstance(self.y_test, np.ndarray))
 
     def get_probability(self, X=None):
-        "get the probability for each class"
+        "return predict probability"
 
         if X is None:
             X = self.X_test
@@ -101,14 +123,12 @@ class ClassificationEvaluator(object):
 
     def get_score_table(self):
         "return the score table"
-
         return (self.prob_df)
 
     def train(self):
         "fit the estimator"
 
         self.estimator = self.estimator.fit(self.X, self.y)
-
         return self
 
     def is_fitted(self, estimator=None):
@@ -292,14 +312,6 @@ class ClassificationEvaluator(object):
     def kfold_validate(self, estimator=None, score_method=None):
         '''
             K fold cross validation
-
-            Valid options are ['accuracy', 'adjusted_rand_score', 'average_precision',
-                'f1', 'f1_macro', 'f1_micro', 'f1_samples', 'f1_weighted', 'neg_log_loss',
-                'neg_mean_absolute_error', 'neg_mean_squared_error', 'neg_median_absolute_error',
-                'precision', 'precision_macro', 'precision_micro', 'precision_samples',
-                'precision_weighted', 'r2', 'recall', 'recall_macro', 'recall_micro',
-                'recall_samples', 'recall_weighted', 'roc_auc']
-
         '''
 
         if estimator is None:
@@ -425,17 +437,21 @@ class ClassificationEvaluator(object):
         return (len(np.unique(self.y)))
 
 
-        "Out of sample Gini coefficient"
+        # "Out of sample Gini coefficient"
 
-        if num_splits is None:
-            num_splits = self.cv
+        # if num_splits is None:
+        #     num_splits = self.cv
 
-        if auc is None:
-            auc, mean_tpr, mean_fpr = self.get_auc(num_splits, splitter, estimator)
-        return (2 * auc - 1)
+        # if auc is None:
+        #     auc, mean_tpr, mean_fpr = self.get_auc(num_splits, splitter, estimator)
+        # return (2 * auc - 1)
 
     def get_auc(self, num_splits=None, splitter=None, estimator=None):
-        "Out of sample AUC estimate"
+        """AUC estimate based on split estimation
+        
+        construct multiple ROC curve to estimate the average AUC
+        
+        """
 
         if estimator is None:
             estimator = self.estimator
@@ -540,6 +556,7 @@ class ClassificationEvaluator(object):
 
         return (2 * auc - 1)
 
+    # FIXME
     def get_importance_features(self):
         "importance of features for RF and GBM only"
 
@@ -560,6 +577,7 @@ class ClassificationEvaluator(object):
         VIR_df.VIR =  VIR_df.VIR * 100
         return (VIR_df)
 
+    # FIXME
     def plot_importance_features(self, limit=20):
         "plot importance of feauturs for RF and GBM only"
 
@@ -587,9 +605,8 @@ class ClassificationEvaluator(object):
 
         return self
 
-
-
-class MultiClassEvaluator(ClassificationEvaluator):
+# TODO: make it as stateless functional 
+class MultiClassEvaluator(BinaryClassificationEvaluator):
     """
         Evaluator for multiclass learners
 
@@ -1024,7 +1041,7 @@ class MultiClassEvaluator(ClassificationEvaluator):
         pass
 
 
-class EnsembleEvaluator(ClassificationEvaluator):
+class EnsembleEvaluator(BinaryClassificationEvaluator):
         "Evaluator for ensemble model"
         def __init__(self, estimator, X_train, y_train,
                  X_test, y_test, cv, target_f, score_method="roc_auc",

@@ -5,7 +5,7 @@ Data Transformation for building classification models
 
 """
 
-from sklearn.base import TransformerMixin, BaseEstimator
+from sklearn.base import TransformerMixin, BaseEstimator, clone
 import random
 import pandas as pd
 import numpy as np
@@ -16,11 +16,16 @@ from datetime import datetime
 import explore as ex
 import utility as ut
 
+# TODO: my own multiclass WoE transformer
+# http://contrib.scikit-learn.org/category_encoders/woe.html
+
+
+
 # ----------------------------------------------------------------------------
 # Imputer
 # ----------------------------------------------------------------------------
 
-class DataFrameImputer(TransformerMixin):
+class DataFrameImputer(BaseEstimator, TransformerMixin):
     """
         Impute missing values
 
@@ -114,7 +119,7 @@ class DataFrameImputer(TransformerMixin):
 # ----------------------------------------------------------------------------
 # Combiner
 # ----------------------------------------------------------------------------
-class Combiner(TransformerMixin):
+class Combiner(BaseEstimator, TransformerMixin):
     """Concatenate data frames by columns
 
         Parameters
@@ -131,7 +136,7 @@ class Combiner(TransformerMixin):
     def transform(self, X):
         return reduce((lambda x, y: pd.concat([x, y.reindex(x.index)], axis=1)), X)
 
-class SequentialTransformer(TransformerMixin):
+class SequentialTransformer(BaseEstimator, TransformerMixin):
     """Sequential pipeline transform
 
         Transform the same data frame with multiple pipelines
@@ -154,10 +159,41 @@ class SequentialTransformer(TransformerMixin):
             out.append(pline.fit_transform(X))
         return out
 
+# TODO: for review
+# class DataFrameFeatureUnion(BaseEstimator, TransformerMixin):
+#     """ A DataFrame transformer that unites several DataFrame transformers
+    
+#     Fit several DataFrame transformers and provides a concatenated
+#     Data Frame
+    
+#     Parameters
+#     ----------
+#     list_of_transformers : list of DataFrameTransformers
+        
+#     """ 
+#     def __init__(self, list_of_transformers):
+#         self.list_of_transformers = list_of_transformers
+        
+#     def transform(self, X, **transformparamn):
+#         "Applies the fitted transformers on a DataFrame"
+        
+#         concatted = pd.concat([transformer.transform(X)
+#                             for transformer in
+#                             self.fitted_transformers_], axis=1).copy()
+#         return concatted
+
+
+#     def fit(self, X, y=None, **fitparams):
+#         self.fitted_transformers_ = []
+#         for transformer in self.list_of_transformers:
+#             fitted_trans = clone(transformer).fit(X, y=None, **fitparams)
+#             self.fitted_transformers_.append(fitted_trans)
+#         return self
+
 # ----------------------------------------------------------------------------
 # Extractor
 # ----------------------------------------------------------------------------
-class DateExtractor(TransformerMixin):
+class DateExtractor(BaseEstimator, TransformerMixin):
     """
         Extract Day, Month and Year of the given date columns
 
@@ -198,7 +234,7 @@ class DateExtractor(TransformerMixin):
 # ----------------------------------------------------------------------------
 # Remover
 # ----------------------------------------------------------------------------
-class DropColumns(TransformerMixin):
+class DropColumns(BaseEstimator, TransformerMixin):
     """Drop columns
     
     Parameters
@@ -217,7 +253,7 @@ class DropColumns(TransformerMixin):
         cols_to_drop = list((set(X.columns).intersection(self._cols)))
         return X.drop(cols_to_drop, axis=1, inplace=False)
 
-class ValueRemover(TransformerMixin):
+class ValueRemover(BaseEstimator, TransformerMixin):
     """
         Remove rows for a given list of values
     
@@ -246,7 +282,7 @@ class ValueRemover(TransformerMixin):
 # ----------------------------------------------------------------------------
 # Creator
 # ----------------------------------------------------------------------------
-class CreateDataFrame(TransformerMixin):
+class CreateDataFrame(BaseEstimator, TransformerMixin):
     """
         Create Data Frame from ndarray or list
 
@@ -269,7 +305,7 @@ class CreateDataFrame(TransformerMixin):
 # ----------------------------------------------------------------------------
 # Encode all categorical columns of data frame
 
-class DummyEncoder(TransformerMixin):
+class DummyEncoder(BaseEstimator, TransformerMixin):
     """Transform Categorical variables to Dummy
         Returns
         --------
@@ -281,7 +317,7 @@ class DummyEncoder(TransformerMixin):
         return pd.get_dummies(X)
 
 
-class TargetEncoder(TransformerMixin):
+class TargetEncoder(BaseEstimator, TransformerMixin):
     """Encode single column 
     
         usually for target column
@@ -308,7 +344,7 @@ class TargetEncoder(TransformerMixin):
         else:
             return self.encoder.transform(X[self.colname])
 
-class CategoricalEncoder(TransformerMixin):
+class CategoricalEncoder(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         return self
@@ -369,7 +405,7 @@ class CategoricalEncoder(TransformerMixin):
 # ----------------------------------------------------------------------------
 # Selector
 # ----------------------------------------------------------------------------
-class DataFrameSelector(TransformerMixin):
+class DataFrameSelector(BaseEstimator, TransformerMixin):
     """Data Frame Selector
     
         Select columns from data frames
@@ -450,7 +486,7 @@ class TypeSelector(BaseEstimator, TransformerMixin):
 # ----------------------------------------------------------------------------
 # Transformer
 # ----------------------------------------------------------------------------
-class HybridTransformer(TransformerMixin):
+class HybridTransformer(BaseEstimator, TransformerMixin):
     """Transform conditional on numerical or categorical types
     
         Parameters
@@ -474,7 +510,7 @@ class HybridTransformer(TransformerMixin):
         # Encoding and return results
         return X.apply(do_transform)
 
-class SupervisedTransformer(TransformerMixin):
+class SupervisedTransformer(BaseEstimator, TransformerMixin):
     """Wrapped Transformer into a pipeline
     
         Parameters
@@ -528,7 +564,7 @@ class SupervisedTransformer(TransformerMixin):
 #         return X.apply(do_transform)
 
 
-class UpperCaseColumn(TransformerMixin):
+class UpperCaseColumn(BaseEstimator, TransformerMixin):
     """Upper Case all column names
     
         Returns
@@ -540,7 +576,7 @@ class UpperCaseColumn(TransformerMixin):
     def transform(self, X):
         return ut.col_upper_case(X, False)
 
-class Scaler(TransformerMixin):
+class Scaler(BaseEstimator, TransformerMixin):
     """Standard Scaler
     
         Returns
@@ -559,7 +595,7 @@ class Scaler(TransformerMixin):
         else:
             return out
 
-class FunctionTransformer(TransformerMixin):
+class FunctionTransformer(BaseEstimator, TransformerMixin):
     """
         Apply a function to all columns of a df
         e.g.
@@ -585,7 +621,7 @@ class FunctionTransformer(TransformerMixin):
         return result
 
 
-class TransformDebugger(TransformerMixin):
+class TransformDebugger(BaseEstimator, TransformerMixin):
     """
         Transformer Wrapper
         Embed a transformer and print debug information

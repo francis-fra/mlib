@@ -579,7 +579,7 @@ def get_single_column(df, col):
     """
     return np.ravel(df[col])
 
-def create_df(df, column_names):
+def reframe(df, column_names):
     """create data frame with exact columns
 
        if column is missing in df, create an empty column
