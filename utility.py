@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 import functools
 from datetime import datetime
 import dateutil.relativedelta
+import matplotlib.pyplot as plt
 
 from sklearn.preprocessing import label_binarize, LabelBinarizer
 import explore as ex
@@ -75,7 +76,7 @@ def connect_td(uid=None, passwd=None, dsn="tdp5"):
 #------------------------------------------------------------
 # Data Frame
 #------------------------------------------------------------
-def extract_and_count(df, filter_col, value, target_col):
+def extract_and_count(df, sel_col, value, target_col):
     """count target values for a particular value in a particular field
 
     counts values from the target column conditioned
@@ -95,21 +96,14 @@ def extract_and_count(df, filter_col, value, target_col):
     """
     return df[df[sel_col] == value][target_col].value_counts()
 
-# FIXME: parametize groupby field
-def extract_and_plot(df, field, value):
-    time_grp = df[df[field] == value].groupby(df.time_in_hour)
-    num_visits = time_grp.count().bytes
-    plt.plot(num_visits.index, num_visits)
-    plt.gcf().autofmt_xdate()
-    
-# FIXME: parametize sort function
-def get_top_counts(data, field, limits):
-    """show the values in descending order"""
-    arr = data[field]
-    arr.sort(key=lambda x: -x[1])
-    return arr[:limits]
+def widedf_to_talldf(self, df, id_vars=None):
+    "convert wide to tall data frame"
 
-
+    if id_vars is None:
+        id_vars = self.target_col
+    df.reset_index(level=0, inplace=True)
+    df = pd.melt(df, id_vars=[id_vars])
+    return df
 
 
 def discretize_column(df, colname, append_column=True, num_bins=3, suffix ='GRP', group_labels=None):
@@ -181,6 +175,35 @@ def discretize_dataframe(df, varList=None, append_column=False, num_bins=3, suff
         return result
     else:
         return pd.concat([df, result], axis=1)
+
+def sort_and_rank(df, col, ascending=False, bypct=True, zero_base=False):
+    """
+        sort data frame by column and append additional rank column
+
+        Parameters
+        ----------
+        df : data frame
+        col : column name
+        bypct : boolean rank in pctile, otherwise in decile
+
+        Returns
+        ----------
+        df : sorted data frame with additional rank column
+    """
+    length = df.shape[0]
+    df = df.sort_values(by=col, ascending=ascending, ignore_index=True)
+    if bypct:
+        scaler = 100
+    else:
+        scaler = 10
+
+    if zero_base:
+        pad = 0
+    else:
+        pad = 1
+
+    df['rank'] = np.floor(df.index / length * scaler) + 1
+    return df
     
 #------------------------------------------------------------
 # Series
@@ -485,6 +508,12 @@ def create_feature_tables(feature_df, target_df, all_df,
     else:
         return (trainData, testData)
 
+def sort_dict(d, sort_key=lambda item: item[1]):
+    "sort dictionary by values"
+    return {k: v for k, v in sorted(d.items(), key=sort_key)}
+
+def reverse_dict(d):
+    return dict(zip(d.values(), d.keys()))
 
 def npslice(arr, begin, size):
     """ tf.slice like function for ndarray

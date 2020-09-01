@@ -790,110 +790,112 @@ class TransformDebugger(BaseEstimator, TransformerMixin):
 
 #         return df
 
-# FIXME: advanced categorical encoder
+# TORM
 # class DataFrameCategoricalEncoder(TransformerMixin):
-#     """
-#         Encode Categorical Columns
+class DataFrameLabelEncoder(TransformerMixin):
+    """
+        Encode Categorical Columns
     
-#         Parameters
-#         ----------
-#         cols : list of columns for filtering
-#         onehot : boolean
-#         exclusion : 
+        Parameters
+        ----------
+        cols : list of columns for filtering
+        onehot : boolean
+        exclusion : 
 
-#         Returns
-#         -------
-#         dataframe filtered by the values
+        Returns
+        -------
+        dataframe filtered by the values
     
-#     """
-#     def __init__(self, cols=None, onehot=True, exclusion=[]):
+    """
+    def __init__(self, cols=None, onehot=True, exclusion=[]):
 
-#         # cols: categorical column (if None, it is determined automatically)
-#         self.reset(cols)
-#         self.exclusion = exclusion
+        # cols: categorical column (if None, it is determined automatically)
+        self.reset(cols)
+        self.exclusion = exclusion
 
-#     def get_transformed_index(self, col, x):
-#         "Return the transformed index of the give value in the column"
+    def get_transformed_index(self, col, x):
+        "Return the transformed index of the give value in the column"
 
-#         d = self.get_transform_map(col)
-#         return d[x]
+        d = self.get_transform_map(col)
+        return d[x]
 
-#     def single_transform(self, col, x):
-#         """
-#         transform the given column
-#         col    : column name in string
-#         x      : pdf series or list to be transformed
+    def single_transform(self, col, x):
+        """
+        transform the given column
+        col    : column name in string
+        x      : pdf series or list to be transformed
 
-#         """
-#         if col in self.fit_dict.keys():
-#             rule = self.fit_dict[col]
-#             return (rule.fit_transform(x))
-#         else:
-#             return None
+        """
+        if col in self.fit_dict.keys():
+            rule = self.fit_dict[col]
+            return (rule.fit_transform(x))
+        else:
+            return None
 
-#     def get_transform_map(self, col):
-#         """Return the transformed dictionary of the given column"""
-#         if col in self.fit_dict.keys():
-#             rule = self.fit_dict[col]
-#             return (dict(zip(rule.classes_, range(len(rule.classes_)))))
-#         else:
-#             return None
+    def get_transform_map(self, col):
+        """Return the transformed dictionary of the given column"""
+        if col in self.fit_dict.keys():
+            rule = self.fit_dict[col]
+            return (dict(zip(rule.classes_, range(len(rule.classes_)))))
+        else:
+            return None
 
-#     def single_inverse_transform(self, col, x):
-#         """Inverse transformed column to original"""
-#         if col in self.fit_dict.keys():
-#             rule = self.fit_dict[col]
-#             return (rule.inverse_transform(x))
-#         else:
-#             return None
+    def single_inverse_transform(self, col, x):
+        """Inverse transformed column to original"""
+        if col in self.fit_dict.keys():
+            rule = self.fit_dict[col]
+            return (rule.inverse_transform(x))
+        else:
+            return None
 
-#     def get_all_transform_map(self):
-#         """Return the transform map of all columns"""
-#         result = defaultdict(np.array)
-#         for col in self.fit_dict.keys():
-#             rule = self.fit_dict[col]
-#             result[col] = dict(zip(rule.classes_, range(len(rule.classes_))))
-#         return (dict(result))
+    def get_all_transform_map(self):
+        """Return the transform map of all columns"""
+        result = defaultdict(np.array)
+        for col in self.fit_dict.keys():
+            rule = self.fit_dict[col]
+            result[col] = dict(zip(rule.classes_, range(len(rule.classes_))))
+        return (dict(result))
 
-#     def reset(self, cols=None):
-#         "reset the state"
-#         # TODO: stacked encoder with oneHot
-#         # TODO: one hot encoding
-#         # label encoder (a default dict is used to assoicate an encoder for that column)
-#         self.fit_dict = defaultdict(LabelEncoder)
-#         self.categorical_cols = cols
+    def reset(self, cols=None):
+        "reset the state"
+        # TODO: stacked encoder with oneHot
+        # TODO: one hot encoding
+        # label encoder (a default dict is used to assoicate an encoder for that column)
+        self.fit_dict = defaultdict(LabelEncoder)
+        self.categorical_cols = cols
 
-#     def fit(self, X, y=None):
-#         "dummy fit"
-#         return self
+    def fit(self, X, y=None):
+        "dummy fit"
+        return self
 
-#     # TODO: inverse_transform
+    # TODO: inverse_transform
 
-#     def transform(self, X, y=None):
-#         '''
-#         Call LabelEncoder() for each column in data frame X
+    def transform(self, X, y=None):
+        '''
+        Call LabelEncoder() for each column in data frame X
 
-#         Parameters
-#         ----------
-#         X     : pandas data frame
-#         '''
-#         # lambda function either transform or a columns or return the same column
-#         do_transform = lambda x: self.fit_dict[x.name].fit_transform(x) \
-#                     if x.name in self.categorical_cols else x
+        Parameters
+        ----------
+        X     : pandas data frame
+        '''
+        # lambda function either transform or a columns or return the same column
+        do_transform = lambda x: self.fit_dict[x.name].fit_transform(x) \
+                    if x.name in self.categorical_cols else x
 
-#         result = X.copy()
+        result = X.copy()
 
-#         # get categorical variables
-#         if self.categorical_cols is None:
-#             self.categorical_cols = ex.get_categorical_column(X)
+        # get categorical variables
+        if self.categorical_cols is None:
+            self.categorical_cols = ex.get_categorical_column(X)
 
-#         # apply exclusions
-#         self.categorical_cols = list(set(self.categorical_cols) - set(self.exclusion))
+        # apply exclusions
+        self.categorical_cols = list(set(self.categorical_cols) - set(self.exclusion))
 
-#         # Encoding and return results
-#         result = result.apply(do_transform)
+        # Encoding and return results
+        result = result.apply(do_transform)
 
-#         return result
+        return result
+
 # class MostFrequentImputer(TransformerMixin):
 #     """
 #         Impute with Most Frequent values
