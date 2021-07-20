@@ -25,9 +25,9 @@ class ClassificationEvaluator(ABC, BaseEstimator):
     def get_roc_curve(self):
         pass
 
-    @abstractmethod
-    def plot_roc_curve(self):
-        pass
+    # @abstractmethod
+    # def plot_roc_curve(self):
+    #     pass
 
 class BinaryClassificationEvaluator(ClassificationEvaluator):
 
@@ -388,7 +388,7 @@ class MultiClassifier(BinaryClassifier):
 
 
 #---------------------------------------------------------------------
-# classifiers
+# Custom classifiers
 #---------------------------------------------------------------------
 class RandomClassifier(BaseEstimator):
     """
@@ -402,7 +402,7 @@ class RandomClassifier(BaseEstimator):
         pass
     def predict(self, X):
         nums = np.zeros((len(X), 1), dtype=bool)
-        N = math.floor(len(X) * self.prop)
+        N = np.floor(len(X) * self.prop)
         nums[:N] = True
         np.random.shuffle(nums)
         return nums

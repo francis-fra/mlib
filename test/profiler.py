@@ -1,5 +1,7 @@
 #!python
 
+# all in one profiler 
+
 import pandas as pd
 import numpy as np
 import sys
@@ -8,62 +10,11 @@ import argparse
 
 
 class Profiler(object):
-    def __init__(self, df, target_col, num_bins=10):
-        """
-            df: data frame
-            target_col: column name in string
-            num_bins: bins for quantizing
-        """
+    def __init__(self, df, target_col, num_bins=10, savefile=None):
         self.target_col = target_col
         self.num_bins = num_bins
         self.df = df
-        # self.savefile = savefile
-        self.num_target_class = self.__get_num_target_class()
-        if (self.num_target_class) <= 1:
-            raise Exception("Invalid Target")
-
-    def __get_num_target_class(self):
-        "get num target class"
-        num_unique = self.count_unique_values(self.df, subset=self.target_col)
-        return num_unique[self.target_col]
-
-    def woe_encode(self):
-        "encode categorical columns with WOE"
-        # find categorical columns
-        categorical_cols = self.get_categorical_column()
-
-        # columns = list(self.df.columns)
-        # columns.remove(target_col)
-        categorical_cols.remove(self.target_col)
-        result = self.df.copy()
-
-        ismulti = self.__get_num_target_class() > 2
-
-        if ismulti:
-            for colname in categorical_cols:
-                try:
-                    # find the proportion of target class
-                    cnts = self.df[self.target_col].value_counts(normalize=True)
-                    woe = self.get_woe(colname, categorical=True)
-                    # find the woe std of each target class
-                    dev = woe.transpose().std()
-                    # find the class with max variation and proportion
-                    idx = (cnts * dev).argmax()
-                    # translation dictionary
-                    d = woe.iloc[idx].to_dict()
-                    result[colname] = result[colname].apply(lambda x: d[x])
-                except:
-                    print('ERROR: skipping {}'.format(colname))
-        else:
-            for colname in categorical_cols:
-                try:
-                    woe = self.get_woe(colname, categorical=True)
-                    d = woe.to_dict()
-                    result[colname] = result[colname].apply(lambda x: d[x])
-                except:
-                    print('ERROR: skipping {}'.format(colname))
-
-        return result
+        self.savefile = savefile
 
     def iv_ranking(self, columns=None):
         "calculate IV values and rank"
@@ -83,6 +34,7 @@ class Profiler(object):
         result = pd.DataFrame({'iv': np.zeros(len(columns))}, index=columns)
 
         for colname in columns:
+#             print('Getting IV for {}'.format(colname))
             is_categorical = colname in categorical_cols
             try:
                 result.loc[colname] = self.get_iv(colname, categorical=is_categorical)
@@ -104,14 +56,13 @@ class Profiler(object):
 
         # multi-class
         if ismulti:
-            for k in range(num_bins):
+            for k in range(10):
                targetDst.iloc[:,k] = (targetDst.iloc[:,k] - altDst[k] ) * woe.iloc[:,k]
 
             if weighted == True:
                 # TODO: weighted IV
                 pass
             else:
-                # find the global sum if multi class
                 iv = targetDst.sum().sum()
         else:
             # binary class
@@ -121,43 +72,31 @@ class Profiler(object):
 
 
     def get_woe(self, colname, var_name='GRP', categorical=False, distOut=False):
-        '''calculate WoE
+        "calculate WoE for each bin"
 
-            Parameter
-            ---------
-            :param: colname   : column to crosstab with the target
-            :param: var_name  : column name prefix in resultant data frame
-            :param: categorical: True if colname is a categorical variable
-
-            Returns
-            -------
-            woe for each possible value against the target
-
-        '''
-
-        # get the distribution
-        (targetDst, altDst) = self.get_distribution(colname, var_name, categorical)
+#         num_bins = self.num_bins
+        (targetDst, altDst) = self.get_profile(colname, var_name, categorical)
         woe = targetDst.copy()
 
         # check if this is multi class
         ismulti = len(targetDst.shape) == 2
         num_bins = len(altDst)
 
-        # get the woe for all possible target value with all possible value in column
-        # e.g. for binary : 0 or 1
         # multi-class
         if ismulti:
-            np.seterr(divide='ignore')
             for k in range(num_bins):
-                # replace any inf with 0 from the series 
-                likelihood = np.log(targetDst.iloc[:,k] / altDst[k])
-                likelihood = likelihood.replace([-np.inf, np.inf], 0)
-                woe.iloc[:,k] = likelihood
+                # column selection
+                if altDst[k] == 0:
+                    woe.iloc[:,k] = np.NaN
+                else:
+                    woe.iloc[:,k] = np.log(targetDst.iloc[:,k] / altDst[k])
         else:
             for k in range(num_bins):
                 # column selection
-                likelihood = np.log(targetDst.iloc[k] / altDst[k])
-                woe.iloc[k] = 0 if np.abs(likelihood) == np.inf else likelihood
+                if altDst[k] == 0:
+                    woe.iloc[k] = np.NaN
+                else:
+                    woe.iloc[k] = np.log(targetDst.iloc[k] / altDst[k])
 
         if distOut:
             return (woe, targetDst, altDst)
@@ -167,22 +106,18 @@ class Profiler(object):
     def get_crosstab(self, colname, var_name='GRP', categorical=False):
         '''
             profile one single variable
-            Calculates the cross table
+            Calculates the cross table or KL divergence
 
-            Parameter
-            ---------
-            :param: colname   : columne to crosstab with the target
             :param: var_name  : column name prefix in resultant data frame
+            :param: raw_count : cross table (if True), KL diverence otherwise
             :param: categorical: True if colname is a categorical variable
-
-            Returns
-            -------
-            crosstab table
 
         '''
         df = self.df
         num_bins = self.num_bins
         target_col = self.target_col
+
+        num_unique = self.count_unique_values(df, subset=target_col)
 
         if not categorical:
             tmp = pd.qcut(df[colname], num_bins, retbins=True, duplicates='drop')
@@ -191,42 +126,42 @@ class Profiler(object):
             newcolname = [var_name + '_' + str(v) for v in range(profile.shape[1])]
             profile.columns = newcolname
         else:
-            # num_unique = self.count_unique_values(df, subset=colname)
-            # num_bins = num_unique[colname]
+            num_unique = self.count_unique_values(df, subset=colname)
+            num_bins = num_unique[colname]
             profile = pd.crosstab(df[target_col], df[colname])
 
         return profile
 
 
-    def get_distribution(self, colname, var_name='GRP', categorical=False):
+    def get_profile(self, colname, var_name='GRP', categorical=False):
         '''
+            profile one single variable
+            Calculates the cross table or KL divergence
 
-            For binary target, get target and no-target distribution
-            For multiclass, the alternative distribution is the global distribution
-
-            Parameter
-            ---------
-            :param: colname   : columne to crosstab with the target
             :param: var_name  : column name prefix in resultant data frame
             :param: categorical: True if colname is a categorical variable
-
-            Returns
-            -------
-            targetDst: target distribution
-            altDst : non-target distribution (for binary class) or
-                    global distribution (for multi class)
+            :return: targetDst: target distribution
+                     altDst : non-target distribution (for binary class) or
+                                 global distribution (for multi class)
 
         '''
 
         # get cross tab
         profile = self.get_crosstab(colname, var_name, categorical)
 
-        num_segments = self.num_target_class
+        df = self.df
+#         num_bins = self.num_bins
+        target_col = self.target_col
+
+        num_unique = self.count_unique_values(df, subset=target_col)
+        num_segments = num_unique[target_col]
 
         # WoE for multi-class
         if num_segments > 2:
             # overall distribution
             bin_distribution = profile.sum() / sum(profile.sum())
+            # check num bins again
+#             num_bins = profile.shape[1]
 
             # calculate likelihood
             for k in range(num_segments):
@@ -236,8 +171,7 @@ class Profiler(object):
             altDst = bin_distribution
             targetDst = profile
 
-        # elif num_segments == 2:
-        else:
+        elif num_segments == 2:
 
             for k in range(num_segments):
                 # row selection
@@ -246,25 +180,25 @@ class Profiler(object):
             altDst = profile.iloc[0]
             targetDst = profile.iloc[1]
 
-        # else:
-        #     print('ERROR: Number of target is too less')
-        #     altDst = None
-        #     targetDst = None
+        else:
+            print('ERROR: Number of target is too less')
+            altDst = None
+            targetDst = None
 
         # return target distribution and alternative distribution
         return (targetDst, altDst)
 
 
 
-    # def widedf_to_talldf(self, df, id_vars=None):
-    #     "convert wide to tall data frame"
+    def widedf_to_talldf(self, df, id_vars=None):
+        "convert wide to tall data frame"
 
-    #     if id_vars is None:
-    #         id_vars = self.target_col
-    #     df.reset_index(level=0, inplace=True)
-    #     df = pd.melt(df, id_vars=[id_vars])
+        if id_vars is None:
+            id_vars = self.target_col
+        df.reset_index(level=0, inplace=True)
+        df = pd.melt(df, id_vars=[id_vars])
 
-    #     return df
+        return df
 
     # data frame utilities
     def count_unique_values(self, df=None, prop=False, subset=None, dropna=True):

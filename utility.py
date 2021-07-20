@@ -457,6 +457,32 @@ def extract_feature_target(df, target, todf=True, exclusions=None):
 #----------------------------------------------------------------------
 # split training / testing data for data frame
 #----------------------------------------------------------------------
+def df_train_test_split(df, target, test_size=0.2, dfout=True):
+    """
+        train test split for data frame
+
+    INPUTS:
+        df: data frame
+        target: column name of target
+        test_size: fraction of test samples
+        df: returns df if True
+
+    OUTPUTS:
+        tuples of (X_train, y_train, X_test, y_test)
+        where
+        X_train, X_test: data frame or numpy
+        y_train, y_test: numpy
+
+    """
+    X = df.iloc[:, df.columns != target]
+    columns = X.columns
+    X = X.to_numpy()
+    y = df[target].to_numpy()
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size)
+    if dfout:
+        return (pd.DataFrame(X_train, columns=columns), y_train, pd.DataFrame(X_test, columns=columns), y_test)
+    else:
+        return (X_train, y_train, X_test, y_test)
 
 # FIXME: program to the abstraction...
 def create_feature_tables(feature_df, target_df, all_df,

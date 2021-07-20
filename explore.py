@@ -40,7 +40,18 @@ def get_type_dict(df):
 #     return (df[col].dtype)
 
 def get_column_for_type(df, data_type, unselect=False):
-    "get column names of the specified type"
+    """ get column names of the specified type
+
+        Parameters
+        ----------
+        df: data frame
+        data_type: string
+        unselect: inverse selection if True
+
+        Returns
+        -------
+        [list of column names]
+    """
     if unselect == False:
         return [col for col in df.dtypes.index if df.dtypes.get(col) == data_type ]
     else:

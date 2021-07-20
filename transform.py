@@ -328,6 +328,10 @@ class TargetEncoder(BaseEstimator, TransformerMixin):
         ----------
         colname  : name of the column to transform
         mapping : optional (use Label Encoder if not given)
+
+        Returns
+        -------
+        ndarray
     
     """
     def __init__(self, colname, mapping=None):
@@ -356,51 +360,16 @@ class CategoricalEncoder(BaseEstimator, TransformerMixin):
         # Encoding and return results
         return X.apply(do_transform)
 
-# class CategoricalEncoder(TransformerMixin):
-#     """Categorical variable Encoder
-
-#         transform all categorical columns and retain non categorical
-
-#         Returns:
-#         --------
-#         data frame
-#     """
-
-#     def fit(self, X, y=None):
-#         return self
-
-#     def transform(self, X):
-#         self.categoricalCols = ex.get_categorical_column(X)
-#         self.fit_dict = defaultdict(LabelEncoder)
-
-#         # lambda function either transform or a columns or return the same column
-#         do_transform = lambda x: self.fit_dict[x.name].fit_transform(x) \
-#                     if x.name in self.categoricalCols else x
-
-#         result = X.copy()
-#         result = result.apply(do_transform)
-#         return result
-
-
-# class SimpleEncoder(TransformerMixin):
-
-#     def fit(self, X, y=None):
-#         return self
-
-#     def transform(self, X):
-#         self.categoricalCols = [col for col in X.dtypes.index if X.dtypes.get(col) == 'object' ]
-#         self.fit_dict = defaultdict(LabelEncoder)
-#         # lambda function either transform or a columns or return the same column
-#         do_transform = lambda x: self.fit_dict[x.name].fit_transform(x) \
-#                     if x.name in self.categoricalCols else x
-
-#         result = X.copy()
-#         # Encoding and return results
-#         result = result.apply(do_transform)
-
-#         return result
-
-
+# FIXME
+class WoeMultiClassEncoder(BaseEstimator, TransformerMixin):
+    def __init__(self, target_col, num_bins=10):
+        self.target_col = target_col
+        self.num_bins=num_bins
+    def fit(self, X, y=None):
+        self.profiler = Profiler(X, self.target_col)
+        return self
+    def transform(self, X):
+        enc = OrdinalEncoder()
 
 # ----------------------------------------------------------------------------
 # Selector
@@ -489,6 +458,7 @@ class TypeSelector(BaseEstimator, TransformerMixin):
 class HybridTransformer(BaseEstimator, TransformerMixin):
     """Transform conditional on numerical or categorical types
     
+        categorical definition is 'object' dtype
         Parameters
         ----------
         X: must be a dataframe (for dtype identification)
@@ -517,7 +487,7 @@ class SupervisedTransformer(BaseEstimator, TransformerMixin):
         ----------
         transformer : instantiated transformer
         X: must be a dataframe (for dtype identification)
-        y: binary target
+        y: binary target (numeric)
         
         Returns
         --------
@@ -681,245 +651,3 @@ class TransformDebugger(BaseEstimator, TransformerMixin):
         "transform routine for pipeline"
         self._debug_print(X)
         return X
-
-# ----------------------------------------------------------------------------
-# DEBUG
-# ----------------------------------------------------------------------------
-# class DataFrameOneHotEncoder(TransformerMixin):
-
-#     def __init__(self, cols=None, exclusion=[]):
-#         self.reset(cols)
-#         self.exclusion = exclusion
-
-#     def reset(self, cols=None):
-#         self.fit_dict = defaultdict(OneHotEncoder)
-#         # self.encoder = defaultdict(OneHotEncoder)
-#         self.categorical_cols = cols
-#         self.shape_dict = None 
-#         self.index = None
-#         self.column_name = None
-
-#     def record_metadata(self, X):
-#         self.shape_dict = X.shape
-#         self.index = X.index
-#         self.column_name = X.columns
-
-#     def fit(self, X, y=None):
-#         return self
-
-#     def inverse_transform(self, X):
-#         pass
-
-#     def transform(self, X):
-#         """
-#         X   : a data frame
-#         """
-
-#         # x is a series
-#         do_transform = lambda x: self.fit_dict[x.name].fit_transform(x.values.reshape(-1, 1)) \
-#             if x.name in self.categorical_cols else x
-
-#         self.record_metadata(X)
-#         result = X.copy()
-
-#         # get categorical variables
-#         if self.categorical_cols is None:
-#             self.categorical_cols = ex.get_categorical_column(X)
-
-#         # apply exclusions
-#         self.categorical_cols = list(set(self.categorical_cols) - set(self.exclusion))
-
-#         # Encoding and return results
-#         result = result.apply(do_transform)
-
-#         return result
-
-
-# class DummyEncoder(TransformerMixin):
-#     '''
-#         Convert the columns to dummy variables
-#     '''
-#     def __init__(self, excluded_cols=None, cols=None):
-#         '''
-#             excluded_cols   : columns to be excluded (higher priority)
-#             cols            : columns to transform
-#         '''
-#         self.reset(excluded_cols, cols)
-
-#     def fit(self, X, y=None):
-#         """needed for pipeline"""
-#         # must return self
-#         return self
-
-#     def set_col(self, cols):
-#         self.cols = cols
-
-#     def reset(self, excluded_cols, cols=None):
-#         "reset the state"
-#         # dictionary of label encoder
-#         self.categorical_cols = cols
-#         if isinstance(excluded_cols, list):
-#             self.excluded_cols = excluded_cols
-#         else:
-#             self.excluded_cols = [excluded_cols]
-
-#     def transform(self, X):
-#         """
-#             X : pd data frame
-
-#         """
-#         # get cols for transformation
-#         if self.categorical_cols is None:
-#             if self.excluded_cols is not None:
-#                 cols = list(set(X.columns) - set(self.excluded_cols))
-#             else:
-#                 cols = X.columns
-#         else:
-#             if self.excluded_cols is not None:
-#                 cols = list(set(self.categorical_cols) - set(self.excluded_cols))
-#             else:
-#                 cols = self.categorical_cols
-
-#         dummy_df = pd.get_dummies(X[cols])
-#         # columns not for transformation
-#         other_cols = list(set(X.columns) - set(cols))
-#         if other_cols is not None:
-#             df = pd.concat([dummy_df, X[other_cols]], axis=1)
-#         else:
-#             df = dummy_df
-
-#         return df
-
-# TORM
-# class DataFrameCategoricalEncoder(TransformerMixin):
-class DataFrameLabelEncoder(TransformerMixin):
-    """
-        Encode Categorical Columns
-    
-        Parameters
-        ----------
-        cols : list of columns for filtering
-        onehot : boolean
-        exclusion : 
-
-        Returns
-        -------
-        dataframe filtered by the values
-    
-    """
-    def __init__(self, cols=None, onehot=True, exclusion=[]):
-
-        # cols: categorical column (if None, it is determined automatically)
-        self.reset(cols)
-        self.exclusion = exclusion
-
-    def get_transformed_index(self, col, x):
-        "Return the transformed index of the give value in the column"
-
-        d = self.get_transform_map(col)
-        return d[x]
-
-    def single_transform(self, col, x):
-        """
-        transform the given column
-        col    : column name in string
-        x      : pdf series or list to be transformed
-
-        """
-        if col in self.fit_dict.keys():
-            rule = self.fit_dict[col]
-            return (rule.fit_transform(x))
-        else:
-            return None
-
-    def get_transform_map(self, col):
-        """Return the transformed dictionary of the given column"""
-        if col in self.fit_dict.keys():
-            rule = self.fit_dict[col]
-            return (dict(zip(rule.classes_, range(len(rule.classes_)))))
-        else:
-            return None
-
-    def single_inverse_transform(self, col, x):
-        """Inverse transformed column to original"""
-        if col in self.fit_dict.keys():
-            rule = self.fit_dict[col]
-            return (rule.inverse_transform(x))
-        else:
-            return None
-
-    def get_all_transform_map(self):
-        """Return the transform map of all columns"""
-        result = defaultdict(np.array)
-        for col in self.fit_dict.keys():
-            rule = self.fit_dict[col]
-            result[col] = dict(zip(rule.classes_, range(len(rule.classes_))))
-        return (dict(result))
-
-    def reset(self, cols=None):
-        "reset the state"
-        # TODO: stacked encoder with oneHot
-        # TODO: one hot encoding
-        # label encoder (a default dict is used to assoicate an encoder for that column)
-        self.fit_dict = defaultdict(LabelEncoder)
-        self.categorical_cols = cols
-
-    def fit(self, X, y=None):
-        "dummy fit"
-        return self
-
-    # TODO: inverse_transform
-
-    def transform(self, X, y=None):
-        '''
-        Call LabelEncoder() for each column in data frame X
-
-        Parameters
-        ----------
-        X     : pandas data frame
-        '''
-        # lambda function either transform or a columns or return the same column
-        do_transform = lambda x: self.fit_dict[x.name].fit_transform(x) \
-                    if x.name in self.categorical_cols else x
-
-        result = X.copy()
-
-        # get categorical variables
-        if self.categorical_cols is None:
-            self.categorical_cols = ex.get_categorical_column(X)
-
-        # apply exclusions
-        self.categorical_cols = list(set(self.categorical_cols) - set(self.exclusion))
-
-        # Encoding and return results
-        result = result.apply(do_transform)
-
-        return result
-
-# class MostFrequentImputer(TransformerMixin):
-#     """
-#         Impute with Most Frequent values
-#     """
-#     def fit(self, X, y=None):
-#         self.most_frequent_ = pd.Series([X[c].value_counts().index[0] for c in X],
-#                                         index=X.columns)
-#         return self
-#     def transform(self, X, y=None):
-#         return X.fillna(self.most_frequent_)
-
-# class Imputer(TransformerMixin):
-
-#     def fit(self, X, y=None):
-#         return self
-
-#     def transform(self, X):
-
-#         self.categoricalCols = [col for col in X.dtypes.index if X.dtypes.get(col) == 'object' ]
-
-#         do_transform = lambda x: x.fillna('NA') \
-#                 if x.name in self.categoricalCols else x.fillna(0)
-
-#         result = X.copy()
-#         result = result.apply(do_transform)
-
-#         return result
