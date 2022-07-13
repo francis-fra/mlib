@@ -172,7 +172,8 @@ def get_numerical_column(df, index=False):
         Return [list of numerical column]
     """
     
-    cols = df._get_numeric_data().columns.tolist()
+    # cols = df._get_numeric_data().columns.tolist()
+    cols = df.select_dtypes([np.number]).columns
     if index == True:
         return [df.columns.get_loc(x) for x in cols]
     else:
@@ -222,6 +223,30 @@ def get_column_type(df, max_distinct=15, cutoff=0.01):
 
     return {'binary': binary_col, 'categorical': categorical_col, 'numerical': numerical_col}
 
+#----------------------------------------------------------------------
+# column type 
+#----------------------------------------------------------------------
+def is_column_numeric(df, column):
+    return column in df.select_dtypes([np.number]).columns
+
+def is_column_categorical(df, column, max_distinct=15, cutoff=0.01):
+    is_non_numeric = not is_column_numeric(df, column)
+    if is_non_numeric:
+        return True
+    else:
+        num_unique_values = count_unique_values(df, prop=False, subset=[column])[column]
+        unique_values_proportion = count_unique_values(df, prop=True, subset=[column])[column]
+        if num_unique_values < max_distinct and unique_values_proportion < cutoff:
+                return True
+    return False
+
+def is_column_binary(df, column):
+    # is_non_numeric = not is_column_numeric(df, column)
+    num_unique_values = count_unique_values(df, prop=False, subset=[column])[column]
+    if num_unique_values == 2:
+        return True
+    else:
+        return False
 
 #----------------------------------------------------------------------
 # Count

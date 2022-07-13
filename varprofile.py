@@ -27,13 +27,12 @@ class Profiler(object):
         num_unique = self.count_unique_values(self.df, subset=self.target_col)
         return num_unique[self.target_col]
 
+    # FIXME: supply the y column 
     def woe_encode(self):
         "encode categorical columns with WOE"
         # find categorical columns
         categorical_cols = self.get_categorical_column()
 
-        # columns = list(self.df.columns)
-        # columns.remove(target_col)
         categorical_cols.remove(self.target_col)
         result = self.df.copy()
 

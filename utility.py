@@ -15,6 +15,9 @@ import functools
 from datetime import datetime
 import dateutil.relativedelta
 import matplotlib.pyplot as plt
+import scipy.stats as stat
+# from __future__ import division
+import scipy.stats.kde as kde
 
 from sklearn.preprocessing import label_binarize, LabelBinarizer
 import explore as ex
@@ -74,8 +77,135 @@ def connect_td(uid=None, passwd=None, dsn="tdp5"):
     return cnxn
 
 #------------------------------------------------------------
+# statistics
+#------------------------------------------------------------
+def hpd_grid(sample, alpha=0.05, roundto=2):
+    """Calculate highest posterior density (HPD) of array for given alpha. 
+    The HPD is the minimum width Bayesian credible interval (BCI). 
+    The function works for multimodal distributions, returning more than one mode
+    Parameters
+    ----------
+    
+    sample : Numpy array or python list
+        An array containing MCMC samples
+    alpha : float
+        Desired probability of type I error (defaults to 0.05)
+    roundto: integer
+        Number of digits after the decimal point for the results
+    Returns
+    ----------
+    hpd: list with the highest density interval
+    x: array with grid points where the density was evaluated
+    y: array with the density values
+    modes: list listing the values of the modes
+          
+    """
+    sample = np.asarray(sample)
+    sample = sample[~np.isnan(sample)]
+    # get upper and lower bounds
+    l = np.min(sample)
+    u = np.max(sample)
+    density = kde.gaussian_kde(sample)
+    x = np.linspace(l, u, 2000)
+    y = density.evaluate(x)
+    #y = density.evaluate(x, l, u) waitting for PR to be accepted
+    xy_zipped = zip(x, y/np.sum(y))
+    xy = sorted(xy_zipped, key=lambda x: x[1], reverse=True)
+    xy_cum_sum = 0
+    hdv = []
+    for val in xy:
+        xy_cum_sum += val[1]
+        hdv.append(val[0])
+        if xy_cum_sum >= (1-alpha):
+            break
+    hdv.sort()
+    diff = (u-l)/20  # differences of 5%
+    hpd = []
+    hpd.append(round(min(hdv), roundto))
+    for i in range(1, len(hdv)):
+        if hdv[i]-hdv[i-1] >= diff:
+            hpd.append(round(hdv[i-1], roundto))
+            hpd.append(round(hdv[i], roundto))
+    hpd.append(round(max(hdv), roundto))
+    ite = iter(hpd)
+    hpd = list(zip(ite, ite))
+    modes = []
+    for value in hpd:
+         x_hpd = x[(x > value[0]) & (x < value[1])]
+         y_hpd = y[(x > value[0]) & (x < value[1])]
+         modes.append(round(x_hpd[np.argmax(y_hpd)], roundto))
+    return hpd, x, y, modes
+
+def get_categorical_interval(cat_intervals):
+    "get middle point from categorical interval"
+    return [np.mean([x.left, x.right]) for x in cat_intervals]
+
+def get_actual_pred_ci(df, target, pred, bins, alpha=0.95):
+    """get confidence interval from model predictions
+
+        Parameters
+        ----------
+        df: data frame
+        target : name of the target column
+        pred : numae of the predicted column
+        bins : bin boundaries
+        alpha: level of confidence
+
+        Returns:
+        --------
+        return intervals for all bins
+    """
+    dfx, _ = pd.cut(df[pred], bins, retbins=True)
+    grp = df.groupby(dfx)[target]
+    interval_keys = list(grp.groups.keys())
+
+    # mean is taken from prediction and std error from actual
+    result = []
+    for k in interval_keys:
+        idx = grp.groups[k]
+        pred_values = df.loc[idx][pred]
+        values = df.loc[idx][target]
+        # interval = stat.t.interval(alpha=alpha, df=len(values)-1, loc=np.mean(pred_values), scale=stat.sem(values)) 
+        interval = stat.norm.interval(alpha=alpha, loc=np.mean(pred_values), scale=stat.sem(values))
+        result.append(interval)
+    return result
+
+def get_conditional_avg(df, x, y, numbins=10):
+    """
+        Get avg value of y conditioned on x
+
+        Parameters
+        ----------
+        sdf    : data frame
+        x      : string
+        y      : string
+        numbins : num bins
+    """
+
+    # check if binning is required
+    if not ex.is_column_categorical(df, x):
+        dfx, bins = pd.cut(df[x], numbins, retbins=True)
+        # mean of y conditional on x
+        avg_line = df.groupby(dfx)[y].mean()
+        xx = (bins[:-1] + bins[1:]) / 2
+    else:
+        cnts = df[x].value_counts().sort_index()
+        avg_line = df.groupby(df[x])[y].mean()
+        xx = cnts.index
+        # no binning - reset numbins to natural unique values
+        numbins = len(xx)
+    
+    return (xx, avg_line)
+
+#------------------------------------------------------------
 # Data Frame
 #------------------------------------------------------------
+def replace_df_value(sdf, idx, colname, value):
+    "immutable function to replace vaue in dataframe"
+    df = sdf.copy()
+    df.loc[idx, colname] = value
+    return df
+
 def extract_and_count(df, sel_col, value, target_col):
     """count target values for a particular value in a particular field
 

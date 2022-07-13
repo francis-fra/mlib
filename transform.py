@@ -15,6 +15,7 @@ from functools import reduce
 from datetime import datetime
 import explore as ex
 import utility as ut
+import varprofile as vp
 
 # TODO: my own multiclass WoE transformer
 # http://contrib.scikit-learn.org/category_encoders/woe.html
@@ -479,6 +480,27 @@ class HybridTransformer(BaseEstimator, TransformerMixin):
             if x.name in self.categoricalCols else self.ntransformer().fit_transform(ut.unravel(x)).ravel()
         # Encoding and return results
         return X.apply(do_transform)
+
+class WoeTransformer(BaseEstimator, TransformerMixin):
+    """Transform all categorical columns into woe
+
+        Parameters
+        ----------
+        X: must be a dataframe 
+        
+        Returns
+        --------
+        data frame
+
+    """
+    def __init__(self, target_col):
+        self.target_col = target_col
+        self.profiler = None
+    def fit(self, X, y=None):
+        self.profiler = vp.Profiler(X, self.target_col)
+        return self
+    def transform(self, X=None):
+        return self.profiler.woe_encode()
 
 class SupervisedTransformer(BaseEstimator, TransformerMixin):
     """Wrapped Transformer into a pipeline

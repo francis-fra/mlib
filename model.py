@@ -412,3 +412,48 @@ class NeverClassifier(BaseEstimator):
         pass
     def predict(self, X):
         return np.zeros((len(X), 1), dtype=bool)
+
+#---------------------------------------------------------------------
+# Profiling
+#---------------------------------------------------------------------
+# Elasticity
+def row_arc_elasticity(df, model, colname, adj, idx=0):
+    """
+        Parameters
+        ----------
+        df    : data frame
+        model : statmodel
+        colname: name in string
+        adj   : plus or minus of the current value
+        idx   : row index for the calculations
+    """
+    v0 = df.iloc[idx][colname]
+    # need to get the stat to properly scale (e.g set around 20% of the range)
+    v1 = v0 + adj
+    v2 = v0 - adj
+
+    tmp01 = util.replace_df_value(df, idx, colname, v1)
+    tmp02 = util.replace_df_value(df, idx, colname, v2)
+
+    d1 = (v1 + v2) / (model.predict(tmp01) + model.predict(tmp02))
+    d2 = (model.predict(tmp02) - model.predict(tmp01)) / (v2 - v1)
+    return (d1*d2)[0]
+
+# FIXME: always the same??
+# def arc_elasticity(df, model, colname, adj, max_row=None):
+#     """
+#         Parameters
+#         ----------
+#         df    : data frame
+#         model : statmodel
+#         colname: name in string
+#         adj   : plus or minus of the current value
+#         idx   : row index for the calculations
+#     """
+#     if max_row is None:
+#         max_rows = len(df)
+#         ids = df.index
+#     else:
+#         ids = np.random.choice(df.index, max_row, replace=False)
+#     result = [row_arc_elasticity(df, model, colname, adj, idx) for idx in ids]
+#     return result
