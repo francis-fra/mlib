@@ -1,0 +1,1 @@
+C:\Users\fchan1\FraDir\MyEnv\myenv\Scripts\activate.bat
